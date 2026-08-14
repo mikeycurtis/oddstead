@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antitecture Doodles — generative architecture sketches</title>
+<meta name="description" content="Seeded, hand-inked generative architecture doodles. Vanilla JavaScript and HTML5 Canvas, no dependencies.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="masthead">
+  <h1>Antitecture <span>Doodles</span></h1>
+  <p class="tagline">Imaginary buildings, drawn with a dry nib. Every sheet is reproducible from its seed.</p>
+</header>
+
+<main>
+  <form class="controls" id="controls" onsubmit="return false;" aria-label="Drawing controls">
+
+    <div class="group group--primary">
+      <button type="button" id="randomize" class="btn btn--primary">Randomize <kbd>space</kbd></button>
+    </div>
+
+    <div class="group">
+      <label for="seed">Seed</label>
+      <input type="text" id="seed" name="seed" class="seed-input" spellcheck="false"
+             autocomplete="off" inputmode="text" maxlength="48"
+             aria-describedby="seed-help">
+      <button type="button" id="apply-seed" class="btn">Apply</button>
+      <span id="seed-help" class="sr-only">Any text works as a seed. Press Enter to redraw.</span>
+    </div>
+
+    <div class="group">
+      <label for="mode">Mode</label>
+      <select id="mode" name="mode">
+        <option value="single">Single building</option>
+        <option value="plate">Plate</option>
+      </select>
+    </div>
+
+    <div class="group" id="count-wrap" hidden>
+      <label for="count">Plate size</label>
+      <select id="count" name="count"></select>
+    </div>
+
+    <div class="group">
+      <label for="mood">Mood</label>
+      <select id="mood" name="mood">
+        <option value="any">Any</option>
+      </select>
+    </div>
+
+    <div class="group group--slider">
+      <label for="yaw">View angle</label>
+      <input type="range" id="yaw" name="yaw" min="-60" max="60" step="1"
+             aria-describedby="yaw-out">
+      <output id="yaw-out" for="yaw">24°</output>
+    </div>
+
+    <div class="group group--slider">
+      <label for="pitch">Eye height</label>
+      <input type="range" id="pitch" name="pitch" min="2" max="38" step="1"
+             aria-describedby="pitch-out">
+      <output id="pitch-out" for="pitch">16°</output>
+    </div>
+
+    <div class="group group--slider">
+      <label for="density">Detail</label>
+      <input type="range" id="density" name="density" min="0.4" max="1.6" step="0.1"
+             aria-describedby="density-out">
+      <output id="density-out" for="density">1.0×</output>
+    </div>
+
+    <div class="group group--actions">
+      <button type="button" id="copy-link" class="btn">Copy seed link</button>
+      <button type="button" id="export-png" class="btn">Export PNG</button>
+    </div>
+  </form>
+
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+
+  <div class="sheet-wrap">
+    <canvas id="sheet" width="900" height="1125" role="img"
+            aria-label="Generated architectural doodle"></canvas>
+  </div>
+
+  <p class="hint">
+    <kbd>space</kbd> new · <kbd>p</kbd> plate · <kbd>s</kbd> save · <kbd>c</kbd> copy ·
+    <kbd>←</kbd><kbd>→</kbd> orbit · <kbd>↑</kbd><kbd>↓</kbd> eye height ·
+    <kbd>[</kbd><kbd>]</kbd> detail · click the sheet to redraw
+  </p>
+</main>
+
+<footer class="colophon">
+  <p>Pure vanilla JavaScript and Canvas 2D. No libraries, no build step, no network.
+     Open <code>index.html</code> straight from disk if you like.</p>
+</footer>
+
+<!-- Script order is the dependency order. Plain script tags, not modules, so the
+     page works from file:// as well as from a server. -->
+<script src="js/rng.js"></script>
+<script src="js/style.js"></script>
+<script src="js/stroke.js"></script>
+<script src="js/paper.js"></script>
+<script src="js/geom.js"></script>
+<script src="js/massing.js"></script>
+<script src="js/el-roofs.js"></script>
+<script src="js/el-openings.js"></script>
+<script src="js/el-facade.js"></script>
+<script src="js/el-details.js"></script>
+<script src="js/el-site.js"></script>
+<script src="js/building.js"></script>
+<script src="js/plate.js"></script>
+<script src="js/export.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

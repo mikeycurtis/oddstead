@@ -1,0 +1,248 @@
+// js/massing.js — volumes, faces, and the Frame abstraction.
+//
+// A building mass is an array of axis-aligned prisms {x, z, w, d, y0, h}.
+// Deliberately restrictive: boxes plus roof geometry cover the whole Antitecture
+// look, and they make painter-ordering trivial. Element functions never see 3D —
+// they get a Frame, which hands them projected 2D points from face-local UV.
+(function () {
+  'use strict';
+  const NS = {};
+  const G = AD.geom;
+
+  // --- prisms ---------------------------------------------------------------
+  function prism(x, z, w, d, y0, h) {
+    return { x: x, z: z, w: w, d: d, y0: y0, h: h };
+  }
+
+  function prismCorners(p) {
+    const x0 = p.x, x1 = p.x + p.w, z0 = p.z, z1 = p.z + p.d;
+    const ya = p.y0, yb = p.y0 + p.h;
+    return [
+      G.v3(x0, ya, z0), G.v3(x1, ya, z0), G.v3(x1, ya, z1), G.v3(x0, ya, z1),
+      G.v3(x0, yb, z0), G.v3(x1, yb, z0), G.v3(x1, yb, z1), G.v3(x0, yb, z1)
+    ];
+  }
+
+  function prismCentroid(p) {
+    return G.v3(p.x + p.w / 2, p.y0 + p.h / 2, p.z + p.d / 2);
+  }
+
+  /**
+   * prismFaces(p) -> [face]  (4 walls + top)
+   * A face carries corners in [bl, br, tr, tl] order as seen from outside, so
+   * face-local u runs left→right and v runs bottom→top.
+   */
+  function prismFaces(p) {
+    const x0 = p.x, x1 = p.x + p.w, z0 = p.z, z1 = p.z + p.d;
+    const ya = p.y0, yb = p.y0 + p.h;
+    const wall = function (dir, nrm, blx, blz, brx, brz, width) {
+      const bl = G.v3(blx, ya, blz), br = G.v3(brx, ya, brz);
+      return {
+        dir: dir,
+        normal: nrm,
+        corners: [bl, br, G.v3(brx, yb, brz), G.v3(blx, yb, blz)],
+        width: width,
+        height: p.h,
+        prism: p
+      };
+    };
+    return [
+      wall('zmax', G.v3(0, 0, 1), x0, z1, x1, z1, p.w),
+      wall('zmin', G.v3(0, 0, -1), x1, z0, x0, z0, p.w),
+      wall('xmax', G.v3(1, 0, 0), x1, z1, x1, z0, p.d),
+      wall('xmin', G.v3(-1, 0, 0), x0, z0, x0, z1, p.d),
+      {
+        dir: 'top',
+        normal: G.v3(0, 1, 0),
+        corners: [G.v3(x0, yb, z1), G.v3(x1, yb, z1), G.v3(x1, yb, z0), G.v3(x0, yb, z0)],
+        width: p.w,
+        height: p.d,
+        prism: p
+      }
+    ];
+  }
+
+  // --- Frame ----------------------------------------------------------------
+  /**
+   * makeFrame(face, cam) -> Frame
+   * frame.pt(u,v)  face-local UV -> projected canvas point (bilinear, so the
+   *                perspective cheat and foreshortening come along for free)
+   * frame.quad(u0,v0,u1,v1)  four projected corners of a sub-rect
+   * frame.width/height       world dimensions
+   * frame.px(u)              approximate projected pixel length of u*width
+   */
+  function makeFrame(face, cam) {
+    const P = [
+      G.project(face.corners[0], cam),
+      G.project(face.corners[1], cam),
+      G.project(face.corners[2], cam),
+      G.project(face.corners[3], cam)
+    ];
+    const pxW = (Math.hypot(P[1].x - P[0].x, P[1].y - P[0].y) +
+      Math.hypot(P[2].x - P[3].x, P[2].y - P[3].y)) * 0.5;
+    const pxH = (Math.hypot(P[3].x - P[0].x, P[3].y - P[0].y) +
+      Math.hypot(P[2].x - P[1].x, P[2].y - P[1].y)) * 0.5;
+
+    const frame = {
+      face: face,
+      dir: face.dir,
+      corners2d: P,
+      width: face.width,
+      height: face.height,
+      pxWidth: pxW,
+      pxHeight: pxH,
+      depth: (P[0].z + P[1].z + P[2].z + P[3].z) / 4,
+      pt: function (u, v) {
+        const bx = P[0].x + (P[1].x - P[0].x) * u;
+        const by = P[0].y + (P[1].y - P[0].y) * u;
+        const tx = P[3].x + (P[2].x - P[3].x) * u;
+        const ty = P[3].y + (P[2].y - P[3].y) * u;
+        return { x: bx + (tx - bx) * v, y: by + (ty - by) * v };
+      },
+      quad: function (u0, v0, u1, v1) {
+        return [
+          frame.pt(u0, v0), frame.pt(u1, v0),
+          frame.pt(u1, v1), frame.pt(u0, v1)
+        ];
+      },
+      px: function (u) { return pxW * u; },
+      pyv: function (v) { return pxH * v; }
+    };
+    return frame;
+  }
+
+  // --- massing recipes ------------------------------------------------------
+  // Each returns {kind, prisms}. Footprints get centred on the origin afterwards.
+
+  function recipeSlab(rng, cfg) {
+    const w = rng.range(9, 16);
+    const d = rng.range(6.5, 10);
+    const floors = rng.int(2, 5);
+    const h = floors * cfg.floorHeight * cfg.heightScale;
+    const prisms = [prism(-w / 2, -d / 2, w, d, 0, h)];
+    if (rng.chance(0.35)) {
+      // low annex on one flank
+      const aw = rng.range(3, 5.5), ad = d * rng.range(0.55, 0.9);
+      const side = rng.chance(0.5) ? 1 : -1;
+      prisms.push(prism(side > 0 ? w / 2 : -w / 2 - aw, -ad / 2, aw, ad, 0,
+        cfg.floorHeight * rng.range(0.9, 1.6)));
+    }
+    return { kind: 'slab', prisms: prisms };
+  }
+
+  function recipeTower(rng, cfg) {
+    const w = rng.range(6, 9.5);
+    const d = rng.range(6, 9.5);
+    const floors = Math.round(rng.int(6, 13) * cfg.heightScale);
+    const total = floors * cfg.floorHeight;
+    const prisms = [];
+    const setbacks = rng.weighted([[0, 2], [1, 3], [2, 1.5]]);
+    let y = 0, cw = w, cd = d, cx = -w / 2, cz = -d / 2;
+    const parts = setbacks + 1;
+    for (let i = 0; i < parts; i++) {
+      const frac = i === parts - 1 ? 1 : rng.range(0.35, 0.6);
+      const seg = (total - y) * frac;
+      prisms.push(prism(cx, cz, cw, cd, y, seg));
+      y += seg;
+      const shrink = rng.range(0.62, 0.85);
+      const nw = cw * shrink, nd = cd * shrink;
+      cx += (cw - nw) * rng.range(0.2, 0.8);
+      cz += (cd - nd) * rng.range(0.2, 0.8);
+      cw = nw; cd = nd;
+    }
+    if (rng.chance(0.45)) {
+      // podium
+      const pw = w * rng.range(1.3, 1.9), pd = d * rng.range(1.1, 1.5);
+      prisms.unshift(prism(-pw / 2 + rng.range(-1, 1), -pd / 2 + rng.range(-1, 1),
+        pw, pd, 0, cfg.floorHeight * rng.range(1, 1.8)));
+    }
+    return { kind: 'tower', prisms: prisms };
+  }
+
+  function recipeLShape(rng, cfg) {
+    const w1 = rng.range(8, 13), d1 = rng.range(6, 8.5);
+    const w2 = rng.range(5, 7.5), d2 = rng.range(7, 12);
+    const f1 = rng.int(2, 4), f2 = rng.int(1, 4);
+    const h1 = f1 * cfg.floorHeight * cfg.heightScale;
+    const h2 = Math.max(cfg.floorHeight, f2 * cfg.floorHeight * cfg.heightScale);
+    const flip = rng.chance(0.5) ? 1 : -1;
+    const a = prism(0, 0, w1, d1, 0, h1);
+    const b = prism(flip > 0 ? w1 - w2 : 0, d1 - rng.range(0.2, 0.9), w2, d2, 0, h2);
+    return { kind: 'lshape', prisms: [a, b] };
+  }
+
+  function recipeCluster(rng, cfg) {
+    const n = rng.int(2, 4);
+    const prisms = [];
+    let cursor = 0;
+    for (let i = 0; i < n; i++) {
+      const w = rng.range(4.5, 9);
+      const d = rng.range(5.5, 9);
+      const floors = rng.int(1, 5);
+      const h = Math.max(cfg.floorHeight, floors * cfg.floorHeight * cfg.heightScale);
+      const z = rng.range(-1.6, 1.6);
+      prisms.push(prism(cursor, z - d / 2, w, d, 0, h));
+      cursor += w - rng.range(0.1, 1.1); // slight interpenetration reads as a terrace
+    }
+    return { kind: 'cluster', prisms: prisms };
+  }
+
+  function recipeLonghouse(rng, cfg) {
+    const w = rng.range(14, 21);
+    const d = rng.range(7.5, 11);
+    const floors = rng.int(1, 2);
+    const h = Math.max(cfg.floorHeight, floors * cfg.floorHeight * cfg.heightScale * 1.15);
+    const prisms = [prism(-w / 2, -d / 2, w, d, 0, h)];
+    if (rng.chance(0.4)) {
+      const tw = rng.range(3.5, 5), td = rng.range(3.5, 5);
+      const tx = rng.range(-w / 2 + 1, w / 2 - tw - 1);
+      prisms.push(prism(tx, -td / 2 + rng.range(-0.5, 0.5), tw, td, 0,
+        h + cfg.floorHeight * rng.range(1.2, 3)));
+    }
+    return { kind: 'longhouse', prisms: prisms };
+  }
+
+  const RECIPES = {
+    slab: recipeSlab,
+    tower: recipeTower,
+    lshape: recipeLShape,
+    cluster: recipeCluster,
+    longhouse: recipeLonghouse
+  };
+
+  function centre(mass) {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    mass.prisms.forEach(function (p) {
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x + p.w);
+      z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z + p.d);
+    });
+    const dx = (x0 + x1) / 2, dz = (z0 + z1) / 2;
+    mass.prisms.forEach(function (p) { p.x -= dx; p.z -= dz; });
+    mass.footprint = { w: x1 - x0, d: z1 - z0 };
+    return mass;
+  }
+
+  /** build(kind, rng, moodCfg) -> {kind, prisms, footprint} */
+  function build(kind, rng, cfg) {
+    const fn = RECIPES[kind] || recipeSlab;
+    const mass = fn(rng, cfg);
+    mass.prisms = mass.prisms.filter(function (p) {
+      return p.w > 0.5 && p.d > 0.5 && p.h > 0.5 &&
+        isFinite(p.x) && isFinite(p.z) && isFinite(p.h);
+    });
+    if (!mass.prisms.length) mass.prisms = [prism(-5, -4, 10, 8, 0, 9)];
+    return centre(mass);
+  }
+
+  NS.prism = prism;
+  NS.prismCorners = prismCorners;
+  NS.prismCentroid = prismCentroid;
+  NS.prismFaces = prismFaces;
+  NS.makeFrame = makeFrame;
+  NS.build = build;
+  NS.recipeNames = ['slab', 'tower', 'lshape', 'cluster', 'longhouse'];
+
+  const root = typeof window !== 'undefined' ? window : globalThis;
+  root.AD = root.AD || {};
+  root.AD.massing = NS;
+})();
