@@ -1,0 +1,92 @@
+Use claude code cli to make a new project for the following... Use Fable for planning and then use cheaper models like Opus 5 and even sonnet for really easy tasks as subagents to do the easy work
+: 
+Product Requirements Document (PRD)
+Project Name: Generative Architecture Doodles (working title: “Antitecture Doodles” or “Building Sketches”)
+Version: 1.0
+Date: 2026-08-14
+Author: [Your Name]
+Status: Draft for implementation agent1. Overview & GoalBuild a vanilla JavaScript + HTML5 Canvas 2D generative system that creates diverse, hand-drawn-style architectural doodles (buildings, structures, façades, and small urban fragments) in the same naïve, ink-doodle aesthetic as Mannay’s face generator.The system must treat every architectural element as a pure code function (no bitmap assets), support multiple variants, and use a lightweight 3D underlay for correct positioning and perspective when the building is rotated or viewed from different angles. Output should look like quick sketchbook pages of fictional architecture drawn with a dry-nib pen on textured paper.Primary goal: Produce visually rich, varied, and stylistically coherent architectural sketches that feel hand-made while remaining fully procedural and reproducible via seed.2. Objectives
+- Generate single buildings or small clusters of buildings on demand.
+- Support multiple viewing angles (front, ¾, isometric-ish, slight top-down) via a rough 3D model.
+- Deliver the same “coding doodles” feel: imperfect lines, variable stroke weight, paper grain, and naïve charm.
+- Allow easy extension with new architectural styles, elements, and accessories.
+- Keep the entire system client-side, lightweight, and dependency-free (vanilla JS only).
+3. Target Users
+- Generative artists and creative coders.
+- Architects / designers looking for quick conceptual sketch inspiration.
+- NFT / generative-art collectors and platforms.
+- Anyone who wants printable sketchbook-style architectural plates.
+4. Core Features4.1 Generative Building System
+- Seeded randomness (URL parameter or internal seed) so every building is reproducible.
+- Hierarchical composition:
+  - Overall massing / volume (box, L-shape, tower, clustered volumes, etc.).
+  - Roof types (flat, pitched, gabled, vaulted, irregular, green-roof variants).
+  - Façade systems (window grids, solid walls, arcades, colonnades, balconies).
+  - Openings (windows, doors, arches) with multiple stylistic variants.
+  - Ornament & detail layers (cornices, pilasters, railings, chimneys, antennas, signage, vegetation, AC units, etc.).
+  - Ground plane / site elements (steps, plinth, sidewalk, small trees, fences).
+4.2 Feature-as-Function Architecture
+- Every visual element (window, door, roof tile pattern, balcony railing, chimney, tear-like rain streak, etc.) is a pure drawing function.
+- Functions accept parameters for size, proportion, style variant, and local transform.
+- Multiple hand-authored variants per element category (inspired by how Mannay handles eyes, noses, glasses, hats, tears).
+4.3 3D Underlay & Positioning
+- Maintain a lightweight 3D representation of the building mass (simple polyhedron or extruded volumes).
+- Project feature attachment points from 3D space onto the 2D canvas.
+- Support yaw / pitch / roll (or equivalent camera orbit) so features stay correctly placed under rotation and perspective.
+- Naïve style: perfect geometric accuracy is not required; slight sliding or exaggeration is acceptable and even desirable.
+4.4 Drawing Style Engine
+- Custom stroke system that mimics dry-nib / fountain-pen ink:
+  - Variable line width with pressure-like swells.
+  - Slight noise / wobble along paths.
+  - Optional filaments or dry-brush texture on stroke edges.
+  - Paper-grain / tooth overlay pass.
+- Consistent “pen” personality across the entire drawing (same as Mannay’s in-house brushes).
+- Optional light color fills or hatching for select elements while remaining predominantly line-based.
+4.5 Output Modes
+- Single building view.
+- “Plate” mode: grid of 12–48 different buildings on one canvas (like the face grids).
+- Optional exploded / diagrammatic view (secondary).
+- Export: PNG download + ability to copy seed.
+4.6 Interaction
+- Button / spacebar / click to generate new building (or new plate).
+- Simple controls for seed, view angle, density of detail, and architectural “mood” or style family (optional first version).
+- Display current seed prominently.
+5. Technical Requirements
+- Stack: Pure vanilla JavaScript + HTML5 Canvas 2D. No frameworks, no p5.js, no Three.js, no external libraries.
+- Performance: Generate a single complex building in < 100 ms on modern hardware; plate of 24 buildings under 1–1.5 s.
+- Reproducibility: Full state determined by a single integer or string seed.
+- Code structure: Modular (separate modules or clear sections for massing, roofs, façades, details, stroke engine, 3D projection, rendering).
+- Browser support: Modern evergreen browsers (Chrome, Firefox, Safari, Edge).
+6. Aesthetic & Style Guidelines
+- Naïve, sketchbook, hand-inked look (reference: Mannay face doodles + his earlier “Antitecture” plates).
+- Embrace imperfection: slightly uneven lines, organic variation, not CAD-perfect.
+- Predominantly black (or dark navy) ink on off-white / textured paper background.
+- Optional subtle color accents (terracotta roofs, green vegetation, blue glass hints) kept restrained.
+- Overall feeling: quick observational sketches of imaginary buildings rather than polished illustrations.
+7. Non-Goals (Out of Scope for v1)
+- Real-time 3D rendering or WebGL.
+- Photorealism or physically accurate architecture.
+- User-uploaded reference images or photo-to-building conversion.
+- Complex interior cutaways or full floor-plan generation.
+- Animation of construction sequence (can be future).
+- Backend, accounts, or marketplace features.
+8. Success Metrics
+- Visual diversity: 100 consecutive generations should feel distinctly different.
+- Style fidelity: Side-by-side comparison with Mannay-style faces should feel like the same “hand”.
+- Technical cleanliness: Zero external dependencies; clear, readable, extensible code.
+- User delight: Ability to generate a pleasing plate of buildings in under 2 seconds and export it.
+9. Implementation Notes for the Agent
+- Start by implementing the custom stroke / brush engine and paper texture.
+- Build a minimal 3D massing + projection helper next.
+- Then create the core element functions (window, door, roof, etc.) with 3–5 variants each.
+- Compose higher-level “building recipes” that combine massing + elements.
+- Add plate mode and seed control last.
+- Keep functions pure and parameter-driven so new styles (Brutalist, Art Nouveau, vernacular, futuristic, etc.) can be added by writing additional variant functions.
+10. Open Questions / Future Extensions
+- Should we support named architectural movements as high-level styles (as Mannay did with ~40 movements)?
+- Color vs. pure monochrome?
+- Support for simple animation (slow rotation or “boiling line” redraw)?
+- Export to SVG in addition to PNG?
+————
+Deliverable expected from the agent:
+A clean, well-commented, single-page (or lightly modular) vanilla JS application that fulfills the above requirements, with a live demo that generates both single buildings and multi-building plates in the target doodle style.
