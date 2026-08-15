@@ -78,8 +78,8 @@
     opts = opts || {};
     const rng = AD.rng.makeRng(String(seed) + ':city');
     const cityScale = clamp(+opts.cityScale || 1, 1, 5);
-    const baseSize = opts.count >= 48 ? 54 : opts.count <= 12 ? 28 : 40;
-    const size = Math.round(baseSize * cityScale);
+    const size = Math.max(4, Math.round((+opts.count || 24) * cityScale));
+    const latticeScale = Math.max(cityScale, Math.min(6, Math.ceil(Math.sqrt(size / 16))));
     const water = coast(seed, rng.fork('water'));
     const roads = [];
     const streetRng = rng.fork('streets');
@@ -102,7 +102,7 @@
     function densify(values) {
       const out = [];
       for (let i = 0; i < values.length - 1; i++) {
-        for (let j = 0; j < cityScale; j++) out.push(values[i] + (values[i + 1] - values[i]) * j / cityScale);
+        for (let j = 0; j < latticeScale; j++) out.push(values[i] + (values[i + 1] - values[i]) * j / latticeScale);
       }
       out.push(values[values.length - 1]);
       return out;
@@ -119,7 +119,7 @@
       const role = Math.abs(cx) < 33 && Math.abs(cz) < 33 ? 'market' : (cx > 35 ? 'hill' : (cz > 42 ? 'waterfront' : 'ordinary'));
       if (br.chance(role === 'ordinary' ? 0.13 : 0.08)) { parks.push({ x0: x0 + 2, x1: x1 - 2, z0: z0 + 2, z1: z1 - 2, x: cx, z: cz, role: 'park', elevation: heightAt(cx, cz) }); continue; }
       blocks.push({ x0: x0, x1: x1, z0: z0, z1: z1, x: cx, z: cz, role: role });
-      const ps = parcel(x0, x1, z0, z1, role, Math.abs(x1 - x0) > Math.abs(z1 - z0) ? 'eastWest' : 'northSouth', br, bi, cityScale);
+      const ps = parcel(x0, x1, z0, z1, role, Math.abs(x1 - x0) > Math.abs(z1 - z0) ? 'eastWest' : 'northSouth', br, bi, latticeScale);
       if (ps) ps.forEach(function (p) { parcels.push(p); });
     }
     parcels.unshift({ x0: civic.x0 + 4, x1: civic.x1 - 4, z0: civic.z0 + 4, z1: civic.z1 - 4, x: 0, z: 0, w: 27, d: 27, role: 'civic', road: 'eastWest', setback: 4, elevation: heightAt(0, 0), rotation: 0, seedTag: 0 });

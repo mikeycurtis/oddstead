@@ -62,7 +62,8 @@
     state.panX = clamp(isFinite(state.panX) ? state.panX : 0, -1.5, 1.5);
     state.panY = clamp(isFinite(state.panY) ? state.panY : 0, -1.5, 1.5);
     state.cityScale = [1, 2, 3, 4, 5].indexOf(+state.cityScale) >= 0 ? +state.cityScale : 1;
-    state.count = AD.plate.counts.indexOf(+state.count) >= 0 ? +state.count : 24;
+    const allowedCounts = state.mode === 'city' ? [24, 48, 96, 192, 384] : AD.plate.counts;
+    state.count = allowedCounts.indexOf(+state.count) >= 0 ? +state.count : 24;
     state.opaqueWalls = state.opaqueWalls === true || state.opaqueWalls === 'true' || state.opaqueWalls === 1;
     state.focus = state.mode === 'plate' && state.focus !== null && state.focus !== '' && Number.isInteger(+state.focus) && +state.focus >= 0 && +state.focus < state.count ? +state.focus : null;
   }
@@ -559,6 +560,9 @@
     el.cityViewWrap.hidden = state.mode !== 'city';
     el.cityScaleWrap.hidden = state.mode !== 'city';
     el.cityScaleWrap.setAttribute('aria-hidden', state.mode !== 'city' ? 'true' : 'false');
+    Array.prototype.forEach.call(el.count.options, function (o) {
+      o.hidden = state.mode !== 'city' && o.dataset.cityOnly === 'true';
+    });
     el.countLabel.textContent = state.mode === 'city' ? 'Building count' : 'Plate size';
     el.countWrap.setAttribute('aria-hidden', state.mode === 'single' ? 'true' : 'false');
   }
@@ -846,6 +850,13 @@
       moodSel.appendChild(o);
     });
     const countSel = document.getElementById('count');
+    [24, 48, 96, 192, 384].forEach(function (n) {
+      const o = document.createElement('option');
+      o.value = String(n);
+      o.textContent = n + ' buildings';
+      o.dataset.cityOnly = 'true';
+      countSel.appendChild(o);
+    });
     AD.plate.counts.forEach(function (n) {
       const o = document.createElement('option');
       o.value = String(n);
