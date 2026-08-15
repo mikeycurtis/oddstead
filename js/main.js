@@ -436,7 +436,14 @@
       status('video recording is not supported in this browser');
       return;
     }
-    const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    const candidates = [
+      'video/mp4;codecs="avc1.4D401E,mp4a.40.2"',
+      'video/mp4;codecs=avc1.4D401E',
+      'video/mp4',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm'
+    ];
     const mimeType = candidates.find(function (type) {
       return typeof MediaRecorder.isTypeSupported !== 'function' || MediaRecorder.isTypeSupported(type);
     }) || '';
@@ -459,10 +466,11 @@
         if (!blob.size) {
           status('recording was empty');
         } else {
+          const extension = type.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
           pendingRecording = {
             blob: blob,
             url: URL.createObjectURL(blob),
-            filename: 'antitecture-' + state.seed.replace(/[^a-z0-9_-]+/gi, '-') + '-' + state.mode + '.webm'
+            filename: 'antitecture-' + state.seed.replace(/[^a-z0-9_-]+/gi, '-') + '-' + state.mode + '.' + extension
           };
           if (el.recordingDialog && typeof el.recordingDialog.showModal === 'function') {
             el.recordingDialog.showModal();

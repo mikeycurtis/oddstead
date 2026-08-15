@@ -657,7 +657,7 @@
       const roof = plan.roofs[i];
       if (roof && roof.variant) {
         const rr = AD.rng.makeRng(plan.seed + ':roof:' + i);
-        const RR = { P: P, cam: cam, prism: pr, roof: roof, pxPerUnit: cam.scale };
+        const RR = { P: P, cam: cam, prism: pr, roof: roof, pxPerUnit: cam.scale, opaqueWalls: !!view.opaqueWalls };
         AD.roofs.roofs[roof.variant](ctx, RR, pens, rr, p);
       }
 

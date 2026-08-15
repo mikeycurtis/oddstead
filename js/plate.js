@@ -29,6 +29,26 @@
     return AD.rng.randomSeedFrom(AD.rng.makeRng(masterSeed + ':cell:' + i));
   }
 
+  function focusRect(o, p) {
+    const base = cellRect(o, o.focusIndex);
+    const target = { x: o.w * 0.06, y: o.h * 0.09, w: o.w * 0.88, h: o.h * 0.78 };
+    return {
+      x: base.x + (target.x - base.x) * p,
+      y: base.y + (target.y - base.y) * p,
+      w: base.w + (target.w - base.w) * p,
+      h: base.h + (target.h - base.h) * p
+    };
+  }
+
+  function clipOutsideFocus(ctx, o) {
+    if (!o.showBackground || o.focusIndex == null) return;
+    const r = focusRect(o, o.focusProgress);
+    ctx.beginPath();
+    ctx.rect(0, 0, o.w, o.h);
+    ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.clip('evenodd');
+  }
+
   function drawHeader(ctx, opts, seedLabel) {
     const w = opts.w, h = opts.h;
     const pens = S.makePens(AD.rng.makeRng(seedLabel + ':platepen'), ST.pens.dryNib);
@@ -92,6 +112,7 @@
     };
     const lod = lodFor(count);
     ctx.save();
+    clipOutsideFocus(ctx, o);
     ctx.globalAlpha = o.showBackground ? 1 : 1 - o.focusProgress;
     drawHeader(ctx, o, o.seed);
     ctx.restore();
@@ -122,14 +143,7 @@
     const p = o.focusProgress;
     const focused = o.focusIndex != null;
     const isFocus = focused && i === o.focusIndex;
-    const targetRect = { x: o.w * 0.06, y: o.h * 0.09, w: o.w * 0.88, h: o.h * 0.78, pad: 0.09 };
-    const rect = isFocus ? {
-      x: baseRect.x + (targetRect.x - baseRect.x) * p,
-      y: baseRect.y + (targetRect.y - baseRect.y) * p,
-      w: baseRect.w + (targetRect.w - baseRect.w) * p,
-      h: baseRect.h + (targetRect.h - baseRect.h) * p,
-      pad: baseRect.pad
-    } : baseRect;
+    const rect = isFocus ? Object.assign(focusRect(o, p), { pad: baseRect.pad }) : baseRect;
     const opacity = o.showBackground ? 1 : (focused && !isFocus ? 1 - p : 1);
     if (focused && !isFocus && !o.showBackground) return;
     const jitter = AD.rng.makeRng(seed + ':view');
@@ -140,6 +154,7 @@
       opaqueWalls: !!o.view.opaqueWalls
     };
     ctx.save();
+    if (!isFocus) clipOutsideFocus(ctx, o);
     ctx.globalAlpha *= opacity;
     let plan = null;
     S.setCaptureGroup(i);

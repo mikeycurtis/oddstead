@@ -25,6 +25,11 @@
     return out;
   }
 
+  function opaquePoly(ctx, R, pts2d) {
+    if (!R.opaqueWalls || !pts2d || pts2d.length < 3) return;
+    S.polyFill(ctx, pts2d, AD.style.paper.base, 1);
+  }
+
   function accentPoly(ctx, pts2d, color, rng) {
     if (!color) return;
     const St = AD.style;
@@ -67,6 +72,7 @@
     const d2 = proj(R, deck), t2 = proj(R, top);
 
     if (G.facing(G.v3(0, 1, 0), R.cam) > 0.02) {
+      opaquePoly(ctx, R, t2);
       accentPoly(ctx, t2, R.roof.accent, rng);
       if (p.lod >= 0.55 && rng.chance(0.6)) {
         S.hatchQuad(ctx, pens.hatch, t2, {
@@ -110,6 +116,7 @@
     slopes.forEach(function (sl) {
       if (!visiblePlane(R, sl[0], sl[1], sl[2])) return;
       const q = proj(R, sl);
+      opaquePoly(ctx, R, q);
       accentPoly(ctx, q, R.roof.accent, rng);
       slopeHatch(ctx, pens, q, rng, p, R.roof.seamGap);
       S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: 0.9, overshoot: 0.15 });
@@ -119,6 +126,7 @@
     // gable triangles at both ends
     [[ra, e0[0], e1[0]], [rb, e0[1], e1[1]]].forEach(function (tri) {
       const q = proj(R, tri);
+      opaquePoly(ctx, R, q);
       S.strokePath(ctx, pens.outline, [q[1], q[0]], { lod: p.lod, width: 0.9 });
       S.strokePath(ctx, pens.outline, [q[2], q[0]], { lod: p.lod, width: 0.9 });
       S.strokePath(ctx, pens.detail, [q[1], q[2]], { lod: p.lod, width: 0.8 });
@@ -150,6 +158,7 @@
     planes.forEach(function (pl) {
       if (!visiblePlane(R, pl[0], pl[1], pl[2])) return;
       const q = proj(R, pl);
+      opaquePoly(ctx, R, q);
       accentPoly(ctx, q, R.roof.accent, rng);
       slopeHatch(ctx, pens, q, rng, p, R.roof.seamGap);
       S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: 0.85, overshoot: 0.12 });
@@ -186,6 +195,7 @@
     const plane = [lo[0], lo[1], hi[1], hi[0]];
     const q = proj(R, plane);
     if (visiblePlane(R, plane[0], plane[1], plane[2])) {
+      opaquePoly(ctx, R, q);
       accentPoly(ctx, q, R.roof.accent, rng);
       slopeHatch(ctx, pens, q, rng, p, R.roof.seamGap);
     }
@@ -286,6 +296,7 @@
       const slope = [ev[0], ev[n], ridge[n], ridge[0]];
       if (!visiblePlane(R, slope[0], slope[1], slope[2])) return;
       const q = proj(R, ev.concat(ridge.slice().reverse()));
+      opaquePoly(ctx, R, q);
       accentPoly(ctx, q, R.roof.accent, rng);
       slopeHatch(ctx, pens, proj(R, slope), rng, p, R.roof.seamGap * 1.4);
       S.strokePath(ctx, pens.detail, proj(R, ev), { lod: p.lod, width: 0.95 });
@@ -353,6 +364,7 @@
       const eave = rowAt(side, 0);
       if (!visiblePlane(R, surf(side, 0, 0), surf(side, 1, 0), surf(side, 1, 1))) return;
       const shell = proj(R, eave.concat(rowAt(side, 1).slice().reverse()));
+      opaquePoly(ctx, R, shell);
       accentPoly(ctx, shell, R.roof.accent, rng);
       // courses following the eave
       if (p.lod >= 0.5) {
@@ -431,6 +443,7 @@
     [[e0[0], e0[1], rb, ra], [e1[1], e1[0], ra, rb]].forEach(function (sl) {
       if (!visiblePlane(R, sl[0], sl[1], sl[2])) return;
       const q = proj(R, sl);
+      opaquePoly(ctx, R, q);
       accentPoly(ctx, q, R.roof.accent, rng);
       if (p.lod >= 0.5) {
         S.hatchQuad(ctx, pens.hatch, q, {
@@ -445,6 +458,7 @@
     // the two gable fields, each framed by a raking cornice
     [[ra, e0[0], e1[0]], [rb, e0[1], e1[1]]].forEach(function (tri) {
       const q = proj(R, tri);
+      opaquePoly(ctx, R, q);
       const cx = (q[0].x + q[1].x + q[2].x) / 3, cy = (q[0].y + q[1].y + q[2].y) / 3;
       S.strokePath(ctx, pens.outline, [q[1], q[0]], { lod: p.lod, width: 0.95 });
       S.strokePath(ctx, pens.outline, [q[2], q[0]], { lod: p.lod, width: 0.95 });
@@ -515,6 +529,7 @@
     hp.planes.forEach(function (pl) {
       if (!visiblePlane(R, pl[0], pl[1], pl[2])) return;
       const q = proj(R, pl);
+      opaquePoly(ctx, R, q);
       accentPoly(ctx, q, R.roof.accent, rng);
       if (p.lod >= 0.5) {
         // courses parallel to the eave (u runs along the eave in this quad)
@@ -618,6 +633,7 @@
     [[e0[0], e0[1], rb, ra], [e1[1], e1[0], ra, rb]].forEach(function (sl) {
       if (!visiblePlane(R, sl[0], sl[1], sl[2])) return;
       const q = proj(R, sl);
+      opaquePoly(ctx, R, q);
       accentPoly(ctx, q, R.roof.accent, rng);
       if (p.lod >= 0.5) {
         // boards running up the slope
@@ -635,6 +651,7 @@
 
     [[ra, e0[0], e1[0]], [rb, e0[1], e1[1]]].forEach(function (tri) {
       const q = proj(R, tri);
+      opaquePoly(ctx, R, q);
       // bargeboards: the gable edge doubled slightly outside itself
       [[q[1], q[0]], [q[2], q[0]]].forEach(function (edge) {
         S.strokePath(ctx, pens.outline, edge, { lod: p.lod, width: 0.95 });
