@@ -29,6 +29,7 @@
   let cssW = 900, cssH = 1100, dpr = 1;
   let plan = null;
   let job = null, rafId = null;
+  let animationId = 0;
   let statusTimer = null;
   let debug = false;
   const el = {};
@@ -149,6 +150,12 @@
     canvas.setAttribute('aria-label', label);
   }
 
+  function stopAnimation() {
+    if (animationId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(animationId);
+    animationId = 0;
+    if (el.animate) el.animate.textContent = 'Animate drawing';
+  }
+
   function stopJob() {
     if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId);
     rafId = null;
@@ -157,6 +164,7 @@
 
   function render() {
     if (!ctx) return;
+    stopAnimation();
     stopJob();
     sanitizeState();
     syncControls();
@@ -221,6 +229,69 @@
       }).finish();
     }
     endFrame(c, lw, lh, scale);
+  }
+
+  function animateDrawing() {
+    if (!ctx) return;
+    if (animationId) { stopAnimation(); render(); return; }
+    stopJob();
+    sanitizeState();
+    syncControls();
+    AD.exporter.writeState(state);
+    layoutCanvas();
+
+    const off = document.createElement('canvas');
+    off.width = Math.round(cssW * dpr);
+    off.height = Math.round(cssH * dpr);
+    const oc = off.getContext('2d');
+    if (!oc) return;
+    drawForExport(oc, off.width, off.height, dpr);
+
+    const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const duration = state.mode === 'plate' ? 3100 : 2600;
+    el.animate.textContent = 'Stop animation';
+    status('drawing…', true);
+
+    function frame(nowTime) {
+      const nowValue = nowTime == null ? Date.now() : nowTime;
+      const raw = Math.max(0, Math.min(1, (nowValue - started) / duration));
+      const eased = raw < 0.78 ? (raw / 0.78) * (raw / 0.78) * (3 - 2 * (raw / 0.78)) * 0.9 : 0.9 + (raw - 0.78) / 0.22 * 0.1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      AD.paper.base(ctx, cssW, cssH, AD.rng.makeRng(state.seed + ':animation-paper'));
+      ctx.save();
+      const revealY = cssH * (1.02 - eased * 1.12);
+      ctx.beginPath();
+      ctx.rect(0, revealY, cssW, cssH - revealY + 2);
+      ctx.clip();
+      ctx.drawImage(off, 0, 0, off.width, off.height, 0, 0, cssW, cssH);
+      ctx.restore();
+
+      // A slightly wandering nib line sells the reveal as a hand moving across paper.
+      const nibY = revealY + Math.sin(raw * Math.PI * 11) * 2.2;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(35,38,48,0.62)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(cssW * 0.07, nibY);
+      for (let x = cssW * 0.07; x <= cssW * 0.93; x += 18) {
+        ctx.lineTo(x, nibY + Math.sin(x * 0.045 + raw * 18) * 1.5);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      if (raw < 1 && animationId !== 0) {
+        status('drawing ' + Math.round(raw * 100) + '%…', true);
+        animationId = requestAnimationFrame(frame);
+      } else {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(off, 0, 0);
+        animationId = 0;
+        el.animate.textContent = 'Animate drawing';
+        status('');
+        updateA11y();
+      }
+    }
+    animationId = requestAnimationFrame(frame);
   }
 
   // --- actions --------------------------------------------------------------
@@ -295,6 +366,7 @@
     el.apply = document.getElementById('apply-seed');
     el.random = document.getElementById('randomize');
     el.copy = document.getElementById('copy-link');
+    el.animate = document.getElementById('animate-drawing');
     el.png = document.getElementById('export-png');
     el.mode = document.getElementById('mode');
     el.count = document.getElementById('count');
@@ -316,6 +388,7 @@
     });
     el.seed.addEventListener('change', applySeedInput);
     el.copy.addEventListener('click', doCopy);
+    el.animate.addEventListener('click', animateDrawing);
     el.png.addEventListener('click', doExport);
 
     el.mode.addEventListener('change', function () {
