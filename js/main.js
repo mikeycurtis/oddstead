@@ -48,6 +48,7 @@
   // --- helpers --------------------------------------------------------------
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
   function wrapYaw(v) { return ((v + 180) % 360 + 360) % 360 - 180; }
+  function cityZoomMin() { return state.mode === 'city' ? Math.max(0.2, 1 / Math.max(1, state.cityScale || 1)) : 1; }
 
   function sanitizeState() {
     if (!state.seed) state.seed = AD.rng.freshSeed();
@@ -58,10 +59,11 @@
     state.pitch = clamp(isFinite(state.pitch) ? state.pitch : 16, 2, 38);
     state.density = clamp(isFinite(state.density) ? state.density : 1, 0.4, 1.6);
     state.monumentality = clamp(isFinite(state.monumentality) ? state.monumentality : 1, 0.7, 1.4);
-    state.zoom = clamp(isFinite(state.zoom) ? state.zoom : 1, 1, 5);
+    state.zoom = clamp(isFinite(state.zoom) ? state.zoom : 1, 0.2, 5);
     state.panX = clamp(isFinite(state.panX) ? state.panX : 0, -1.5, 1.5);
     state.panY = clamp(isFinite(state.panY) ? state.panY : 0, -1.5, 1.5);
     state.cityScale = [1, 2, 3, 4, 5].indexOf(+state.cityScale) >= 0 ? +state.cityScale : 1;
+    state.zoom = clamp(state.zoom, cityZoomMin(), 5);
     const allowedCounts = state.mode === 'city' ? [24, 48, 96, 192, 384] : AD.plate.counts;
     state.count = allowedCounts.indexOf(+state.count) >= 0 ? +state.count : 24;
     state.opaqueWalls = state.opaqueWalls === true || state.opaqueWalls === 'true' || state.opaqueWalls === 1;
@@ -145,7 +147,7 @@
   }
 
   function resetCityView() {
-    state.zoom = 1;
+    state.zoom = cityZoomMin();
     state.panX = 0;
     state.panY = 0;
     render({ immediate: true });
@@ -631,7 +633,7 @@
       state.cityScale = +el.cityScale.value;
       state.panX = 0;
       state.panY = 0;
-      state.zoom = 1;
+      state.zoom = cityZoomMin();
       render();
     });
     el.mood.addEventListener('change', function () {
@@ -738,7 +740,7 @@
       if (pinch && state.mode === 'city') {
         const ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
         const distance = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
-        state.zoom = clamp(pinch.zoom * distance / Math.max(1, pinch.distance), 1, 5);
+        state.zoom = clamp(pinch.zoom * distance / Math.max(1, pinch.distance), cityZoomMin(), 5);
         render({ immediate: true });
         return;
       }
@@ -795,7 +797,7 @@
       e.preventDefault();
       const oldZoom = state.zoom;
       const factor = Math.exp(-e.deltaY * 0.0015);
-      state.zoom = clamp(oldZoom * factor, 1, 5);
+      state.zoom = clamp(oldZoom * factor, cityZoomMin(), 5);
       const box = canvas.getBoundingClientRect();
       const px = (e.clientX - box.left) / Math.max(1, box.width) - 0.5;
       const py = (e.clientY - box.top) / Math.max(1, box.height) - 0.5;
