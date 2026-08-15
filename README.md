@@ -9,7 +9,7 @@ Oddstead is a dependency-free generative architecture sketchbook for making seed
 - Deterministic seeded building generation
 - Single-building and multi-study plate modes
 - Full orbit controls with eye-height adjustment
-- Cultural building families including Japanese, Chinese, European, Greek, Moorish, Nordic, Art Deco, and South Asian styles
+- Cultural building families including Japanese, Chinese, European, Greek, Moorish, Nordic, Art Deco, South Asian, medieval castle, Japanese castle, South Asian temple, East Asian temple, Mesoamerican temple, and Classical Greek/Roman temple
 - Paper-backed roof and wall rendering with optional opaque walls
 - Plate building focus with animated cover-style zoom-out restoration
 - True stroke-by-stroke drawing replay

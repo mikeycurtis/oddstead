@@ -202,12 +202,55 @@
     return { kind: 'longhouse', prisms: prisms };
   }
 
+  function recipeCastle(rng, cfg) {
+    const w = rng.range(12, 17), d = rng.range(10, 14);
+    const wallH = cfg.floorHeight * rng.range(1.2, 2.1);
+    const towerW = rng.range(2.4, 3.5), towerH = cfg.floorHeight * rng.range(3.5, 6.5);
+    const prisms = [prism(-w / 2, -d / 2, w, d, 0, wallH)];
+    [[-w / 2, -d / 2], [w / 2 - towerW, -d / 2],
+      [-w / 2, d / 2 - towerW], [w / 2 - towerW, d / 2 - towerW]].forEach(function (p) {
+      prisms.push(prism(p[0], p[1], towerW, towerW, 0, towerH));
+    });
+    if (rng.chance(0.7)) {
+      const kw = w * rng.range(0.35, 0.52), kd = d * rng.range(0.35, 0.52);
+      prisms.push(prism(-kw / 2, -kd / 2, kw, kd, wallH, towerH * rng.range(0.55, 0.9)));
+    }
+    return { kind: 'castle', prisms: prisms };
+  }
+
+  function recipeSteppedTemple(rng, cfg) {
+    const baseW = rng.range(12, 18), baseD = rng.range(10, 15);
+    const baseH = cfg.floorHeight * rng.range(0.45, 0.75);
+    const midW = baseW * rng.range(0.68, 0.8), midD = baseD * rng.range(0.68, 0.8);
+    const topW = midW * rng.range(0.62, 0.78), topD = midD * rng.range(0.62, 0.78);
+    const prisms = [
+      prism(-baseW / 2, -baseD / 2, baseW, baseD, 0, baseH),
+      prism(-midW / 2, -midD / 2, midW, midD, baseH, baseH * rng.range(0.8, 1.25)),
+      prism(-topW / 2, -topD / 2, topW, topD, baseH * 2, cfg.floorHeight * rng.range(1.5, 2.8))
+    ];
+    return { kind: 'steppedTemple', prisms: prisms };
+  }
+
+  function recipeClassicalTemple(rng, cfg) {
+    const w = rng.range(11, 17), d = rng.range(8, 12);
+    const podium = cfg.floorHeight * rng.range(0.55, 0.9);
+    const cellaH = cfg.floorHeight * rng.range(2.1, 3.5);
+    const cellaW = w * rng.range(0.5, 0.68), cellaD = d * rng.range(0.48, 0.68);
+    return { kind: 'classicalTemple', prisms: [
+      prism(-w / 2, -d / 2, w, d, 0, podium),
+      prism(-cellaW / 2, -cellaD / 2, cellaW, cellaD, podium, cellaH)
+    ] };
+  }
+
   const RECIPES = {
     slab: recipeSlab,
     tower: recipeTower,
     lshape: recipeLShape,
     cluster: recipeCluster,
-    longhouse: recipeLonghouse
+    longhouse: recipeLonghouse,
+    castle: recipeCastle,
+    steppedTemple: recipeSteppedTemple,
+    classicalTemple: recipeClassicalTemple
   };
 
   function centre(mass) {
@@ -240,7 +283,8 @@
   NS.prismFaces = prismFaces;
   NS.makeFrame = makeFrame;
   NS.build = build;
-  NS.recipeNames = ['slab', 'tower', 'lshape', 'cluster', 'longhouse'];
+  NS.recipeNames = ['slab', 'tower', 'lshape', 'cluster', 'longhouse',
+    'castle', 'steppedTemple', 'classicalTemple'];
 
   const root = typeof window !== 'undefined' ? window : globalThis;
   root.AD = root.AD || {};

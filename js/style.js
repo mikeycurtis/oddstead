@@ -386,12 +386,104 @@
       detail: { eave: 0.85, planters: 0.8, windowBox: 0.4, vines: 0.4, groundPlant: 0.8, treeCount: 1.3 },
       floorHeight: 3.3,
       heightScale: 0.85
+    },
+    medievalcastle: {
+      label: 'European medieval castle',
+      massing: { castle: 7, tower: 2, cluster: 1 },
+      roofs: { crenellated: 5, steepGable: 3, gabled: 2, hipped: 0.8 },
+      facades: { solid: 5, arcade: 2, stuccoBays: 1, grid: 0.8 },
+      windows: { arched: 4, plain: 3, round: 1, shuttered: 0.8 },
+      doors: { gateway: 5, arched: 3, plank: 2, dbl: 1 },
+      gear: { finial: 3, dovecote: 2, chimney: 1.5, spire: 0.8 },
+      trees: { pine: 3, cypress: 2, bush: 3, round: 2, flowering: 0.8 },
+      ornaments: { cornice: 3, quoins: 2.5, pilasters: 1.5, brackets: 1 },
+      accentBias: { slate: 4, ochre: 2, terracotta: 2, sage: 1.5, mustard: 0.8 },
+      detail: { eave: 0.35, planters: 0.25, windowBox: 0.1, vines: 0.2, groundPlant: 0.5, treeCount: 0.9 },
+      floorHeight: 3.4,
+      heightScale: 1.0
+    },
+    japanesecastle: {
+      label: 'Japanese castle',
+      massing: { castle: 5, tower: 3, cluster: 1.5 },
+      roofs: { sweptEave: 4, broadEave: 3, hipped: 2, crenellated: 0.8 },
+      facades: { screened: 4, latticeBay: 3, timberFrame: 2, solid: 1.5, veranda: 1 },
+      windows: { lattice: 4, timberPane: 3, round: 1, plain: 1 },
+      doors: { gateway: 4, plank: 3, dbl: 1.5, plain: 0.8 },
+      gear: { finial: 4, spire: 2, cupola: 1, chimney: 0.5 },
+      trees: { pine: 4, bamboo: 2, maple: 3, flowering: 2, bush: 2 },
+      ornaments: { bracketTier: 4, latticeBand: 3, brackets: 2, cornice: 1 },
+      accentBias: { slate: 4, ochre: 2, sage: 2, terracotta: 1.5, olive: 1 },
+      detail: { eave: 1, planters: 0.4, windowBox: 0.15, vines: 0.2, groundPlant: 0.8, treeCount: 1.2 },
+      floorHeight: 3.1,
+      heightScale: 1.1
+    },
+    southasiantemple: {
+      label: 'South Asian temple',
+      massing: { tower: 4, steppedTemple: 3, cluster: 2, classicalTemple: 1 },
+      roofs: { steppedParapet: 4, broadEave: 2.5, hipped: 1.5, pantile: 1, pediment: 0.8 },
+      facades: { colonnade: 4, arcade: 3, veranda: 3, screened: 1.5, solid: 1 },
+      windows: { arched: 3, round: 2, lattice: 2, plain: 1 },
+      doors: { gateway: 5, arched: 3, dbl: 1.5, plain: 0.8 },
+      gear: { cupola: 3, finial: 3, spire: 2, chimney: 0.5 },
+      trees: { palm: 3, flowering: 4, bamboo: 2, round: 2, bush: 2 },
+      ornaments: { pilasters: 3, cornice: 2, brackets: 2, latticeBand: 2, quoins: 1 },
+      accentBias: { ochre: 4, terracotta: 3, mustard: 2, sage: 1.5, olive: 1 },
+      detail: { eave: 0.8, planters: 0.8, windowBox: 0.25, vines: 0.35, groundPlant: 0.9, treeCount: 1.25 },
+      floorHeight: 3.3,
+      heightScale: 0.95
+    },
+    eastasiantemple: {
+      label: 'East Asian temple',
+      massing: { steppedTemple: 3, cluster: 3, longhouse: 2.5, tower: 1 },
+      roofs: { sweptEave: 5, broadEave: 3, hipped: 1.5, pantile: 1 },
+      facades: { latticeBay: 4, screened: 3, veranda: 3, timberFrame: 2, colonnade: 1 },
+      windows: { iceRay: 4, lattice: 3, timberPane: 2, round: 1.5, plain: 0.5 },
+      doors: { moonGate: 3, gateway: 3, plank: 2, dbl: 1 },
+      gear: { finial: 4, cupola: 2, spire: 1, chimney: 0.5 },
+      trees: { bamboo: 4, willow: 3, pine: 3, flowering: 2, bush: 2 },
+      ornaments: { bracketTier: 4, latticeBand: 3, brackets: 2, cornice: 1 },
+      accentBias: { terracotta: 3, ochre: 3, sage: 2, olive: 2, slate: 1 },
+      detail: { eave: 1, planters: 0.7, windowBox: 0.2, vines: 0.25, groundPlant: 0.9, treeCount: 1.35 },
+      floorHeight: 3.0,
+      heightScale: 0.85
+    },
+    mesoamerican: {
+      label: 'Mesoamerican stepped temple',
+      massing: { steppedTemple: 7, tower: 1.5, cluster: 1 },
+      roofs: { steppedParapet: 5, flat: 3, crenellated: 1.5 },
+      facades: { solid: 5, arcade: 2, colonnade: 1, grid: 0.5 },
+      windows: { plain: 5, round: 1, arched: 0.5 },
+      doors: { gateway: 5, plain: 2, arched: 1 },
+      gear: { finial: 3, spire: 2, cupola: 0.5 },
+      trees: { palm: 3, bush: 3, flowering: 2, round: 1.5 },
+      ornaments: { pilasters: 3, chevrons: 2, cornice: 2, quoins: 1 },
+      accentBias: { ochre: 5, terracotta: 3, mustard: 2, sage: 1, olive: 1 },
+      detail: { eave: 0.1, planters: 0.15, windowBox: 0, vines: 0.2, groundPlant: 0.8, treeCount: 1.1 },
+      floorHeight: 3.2,
+      heightScale: 0.9
+    },
+    classicaltemple: {
+      label: 'Classical Greek / Roman temple',
+      massing: { classicalTemple: 6, longhouse: 2, steppedTemple: 1.5, slab: 1 },
+      roofs: { pediment: 6, hipped: 1.5, gabled: 1, flat: 0.5 },
+      facades: { colonnade: 6, stuccoBays: 2, arcade: 1, solid: 0.8 },
+      windows: { trabeated: 5, plain: 2, round: 0.5, arched: 0.5 },
+      doors: { pedimentDoor: 5, dbl: 2, arched: 1, plain: 0.5 },
+      gear: { acroterion: 5, finial: 2, cupola: 0.5, chimney: 0.3 },
+      trees: { olive: 4, cypress: 3, round: 2, bush: 2, flowering: 1 },
+      ornaments: { triglyphs: 5, cornice: 4, pilasters: 2, quoins: 0.5 },
+      accentBias: { ochre: 4, slate: 3, terracotta: 2, sage: 1.5, olive: 1.5 },
+      detail: { eave: 0.4, planters: 0.5, windowBox: 0.1, vines: 0.2, groundPlant: 0.6, treeCount: 1 },
+      floorHeight: 3.5,
+      heightScale: 0.85
     }
   };
 
   NS.moodNames = ['town', 'tower', 'industrial', 'mediterranean',
     'japanese', 'chinese', 'european', 'greek',
-    'moorish', 'nordic', 'deco', 'southasian'];
+    'moorish', 'nordic', 'deco', 'southasian',
+    'medievalcastle', 'japanesecastle', 'southasiantemple',
+    'eastasiantemple', 'mesoamerican', 'classicaltemple'];
 
   /** Detail knobs, with defaults, for a mood name. Never returns undefined. */
   NS.detailOf = function (mood) {
