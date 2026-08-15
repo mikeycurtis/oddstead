@@ -598,12 +598,27 @@
       const xx = x * rc - z * rs, zz = x * rs + z * rc;
       return G.project({ x: origin.x + xx, y: origin.y + y, z: origin.z + zz }, cam);
     };
+    const transformV = function (v) {
+      const xx = v.x * rc - v.z * rs, zz = v.x * rs + v.z * rc;
+      return G.v3(origin.x + xx, origin.y + v.y, origin.z + zz);
+    };
+    const transformN = function (v) {
+      return G.v3(v.x * rc - v.z * rs, v.y, v.x * rs + v.z * rc);
+    };
+    const facesOf = plan.mass.prisms.map(function (pr) {
+      return M.prismFaces(pr).map(function (face) {
+        return Object.assign({}, face, {
+          corners: face.corners.map(transformV),
+          normal: transformN(face.normal)
+        });
+      });
+    });
     const preset = ST.pens[plan.penName] || ST.pens.dryNib;
     const pens = S.makePens(AD.rng.makeRng(plan.seed + ':pen'), preset);
     const R = {
       P: P, cam: cam, pxPerUnit: cam.scale,
       opaqueWalls: !!view.opaqueWalls,
-      facesOf: plan.mass.prisms.map(function (pr) { return M.prismFaces(pr); })
+      facesOf: facesOf
     };
     const palette = plan.accents;
     const p = {
@@ -626,7 +641,7 @@
 
     // planting sorted against the building's own depth, so what stands behind
     // the volumes is drawn before them and what stands in front is drawn after
-    const depthOf = function (x, z) { return G.rot({ x: x, y: 0, z: z }, cam).z; };
+    const depthOf = function (x, z) { return G.rot(transformV(G.v3(x, 0, z)), cam).z; };
     const frontDepth = depthOf(0, plan.mass.footprint.d / 2);
     const trees = plan.site.trees.map(function (t) {
       return { t: t, depth: depthOf(t.x, t.z) };
@@ -654,7 +669,7 @@
 
     // --- volumes, far to near ----------------------------------------------
     const order = plan.mass.prisms.map(function (pr, i) {
-      return { i: i, z: G.rot(M.prismCentroid(pr), cam).z };
+      return { i: i, z: G.rot(transformV(M.prismCentroid(pr)), cam).z };
     }).sort(function (a, b) { return a.z - b.z; });
 
     order.forEach(function (entry) {
@@ -667,11 +682,10 @@
         const face = R.facesOf[i].filter(function (f) { return f.dir === dir; })[0];
         const fv = G.facing(face.normal, cam);
         if (fv <= 0.05) return;
-        const c = M.prismCentroid(pr);
-        const nrm = face.normal;
-        const cz = G.rot({
-          x: c.x + nrm.x * pr.w * 0.5, y: c.y, z: c.z + nrm.z * pr.d * 0.5
-        }, cam).z;
+        const c = face.corners.reduce(function (sum, q) {
+          return { x: sum.x + q.x / 4, y: sum.y + q.y / 4, z: sum.z + q.z / 4 };
+        }, { x: 0, y: 0, z: 0 });
+        const cz = G.rot(c, cam).z;
         vis.push({ dir: dir, z: cz });
       });
       vis.sort(function (a, b) { return a.z - b.z; });

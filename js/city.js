@@ -132,13 +132,10 @@
     city.parks.forEach(function (p, i) {
       const q = [{ x: p.x0, z: p.z0 }, { x: p.x1, z: p.z0 }, { x: p.x1, z: p.z1 }, { x: p.x0, z: p.z1 }];
       fillPoly(ctx, worldPath(R, q, p.elevation), '#c7d3b6', 0.5);
-      S.strokePoly(ctx, pens.hair, worldPath(R, q, p.elevation + 0.05), { lod: lod, close: true, alpha: 0.55 });
       if (lod > 0.5) S.strokePath(ctx, pens.hair, worldPath(R, [{ x: p.x0 + 2, z: p.z0 + 2 }, { x: p.x1 - 2, z: p.z1 - 2 }], p.elevation + 0.08), { lod: lod, alpha: 0.45 });
     });
     city.roads.forEach(function (road) {
-      fillPoly(ctx, worldPath(R, roadBand(road), 0.08), road.kind === 'primary' ? '#d8cdb8' : '#e2d9c9', road.kind === 'primary' ? 0.88 : 0.72);
-      S.strokePoly(ctx, pens.outline, worldPath(R, roadBand(road), 0.12), { lod: lod, close: true, width: road.kind === 'primary' ? 1.0 : 0.72 });
-      if (road.kind === 'primary') S.strokePath(ctx, pens.hair, worldPath(R, road.points, 0.15), { lod: lod, alpha: 0.45, width: 0.65 });
+      fillPoly(ctx, worldPath(R, roadBand(road), 0.08), road.kind === 'primary' ? '#d8cdb8' : '#e2d9c9', road.kind === 'primary' ? 0.78 : 0.58);
     });
     city.blocks.forEach(function (b) {
       const q = [{ x: b.x0 + 1, z: b.z0 + 1 }, { x: b.x1 - 1, z: b.z0 + 1 }, { x: b.x1 - 1, z: b.z1 - 1 }, { x: b.x0 + 1, z: b.z1 - 1 }];
@@ -151,7 +148,7 @@
     });
     const civic = city.civic;
     const cq = [{ x: civic.x0, z: civic.z0 }, { x: civic.x1, z: civic.z0 }, { x: civic.x1, z: civic.z1 }, { x: civic.x0, z: civic.z1 }];
-    S.strokePoly(ctx, pens.outline, worldPath(R, cq, civic.elevation + 0.18), { lod: lod, close: true, alpha: 0.8, width: 1.1 });
+    fillPoly(ctx, worldPath(R, cq, civic.elevation), '#d9cfbb', 0.28);
     ctx.save(); ctx.fillStyle = ST.caption.color; ctx.font = ST.caption.small; ctx.fillText('CIVIC CORE', R.P(0, civic.elevation + 0.2, -20).x - 30, R.P(0, civic.elevation + 0.2, -20).y); ctx.restore();
     ctx.save(); ctx.fillStyle = ST.caption.color; ctx.font = ST.caption.small; ctx.fillText('WATERFRONT', w * 0.055, h * 0.91); ctx.restore();
   }
