@@ -69,6 +69,10 @@
     plan.parcels.forEach(scaleRect);
     plan.parks.forEach(scaleRect);
     scaleRect(plan.civic);
+    if (plan.atmosphere) {
+      plan.atmosphere.clouds.forEach(function (c) { c.x *= factor; c.z *= factor; c.w *= factor; c.d *= factor; c.y *= 1; });
+      plan.atmosphere.birds.forEach(function (b) { b.x *= factor; b.z *= factor; });
+    }
     plan.buildings.forEach(function (b) { b.x *= factor; b.z *= factor; });
     plan.cityScale = factor;
     return plan;
@@ -90,6 +94,25 @@
       role: role, elevation: heightAt((x0 + x1) / 2, (z0 + z1) / 2), trees: trees,
       amenity: amenity, pathT: rng.range(0.25, 0.75)
     };
+  }
+
+  function makeAtmosphere(seed, cityScale) {
+    const rng = AD.rng.makeRng(String(seed) + ':atmosphere');
+    const clouds = [];
+    const birds = [];
+    const cloudCount = 3 + rng.int(0, Math.min(3, cityScale));
+    const birdCount = 2 + rng.int(0, 1);
+    for (let i = 0; i < cloudCount; i++) clouds.push({
+      x: rng.range(B.x0 + 12, B.x1 - 12), z: rng.range(B.z0 + 10, B.z1 - 10),
+      y: rng.range(18, 30), w: rng.range(6, 13), d: rng.range(3, 7),
+      puff: rng.int(2, 4)
+    });
+    for (let i = 0; i < birdCount; i++) birds.push({
+      x: rng.range(B.x0 + 15, B.x1 - 15), z: rng.range(B.z0 + 15, B.z1 - 15),
+      y: rng.range(12, 20), s: rng.range(2.8, 5.2),
+      wing: rng.range(-0.35, 0.35)
+    });
+    return { clouds: clouds, birds: birds };
   }
 
   function generate(seed, opts) {
@@ -158,7 +181,7 @@
       return { index: i, seed: String(seed) + ':building:' + i + ':' + p.seedTag, mood: mood, x: p.x, z: p.z,
         elevation: p.elevation, rotation: p.rotation, parcel: p, scale: p.role === 'civic' ? 1.35 : p.role === 'market' ? 1.08 : rng.range(0.82, 1.08) };
     });
-    const city = { seed: String(seed), bounds: B, water: water, roads: roads, blocks: blocks, parcels: parcels, parks: parks, civic: civic, buildings: buildings, size: size };
+    const city = { seed: String(seed), bounds: B, water: water, roads: roads, blocks: blocks, parcels: parcels, parks: parks, civic: civic, buildings: buildings, atmosphere: makeAtmosphere(seed, cityScale), size: size };
     return scaleCity(city, clamp(+opts.cityScale || 1, 1, 5));
   }
   function worldPath(R, pts, y) { return pts.map(function (q) { return R.P(q.x, y == null ? 0 : y, q.z); }); }
@@ -192,6 +215,26 @@
     fillPoly(ctx, worldPath(R, land), ST.paper.baseColor || '#f4efdf', 0.86);
     fillPoly(ctx, worldPath(R, city.water), '#b9d4d0', 0.72);
     S.strokePoly(ctx, pens.outline, worldPath(R, city.water), { lod: lod, close: true, width: 1.15 });
+    const atmosphere = city.atmosphere || { clouds: [], birds: [] };
+    atmosphere.clouds.forEach(function (c) {
+      if (G.rot({ x: c.x, y: c.y, z: c.z }, cam).z <= 0) return;
+      const center = R.P(c.x, c.y, c.z);
+      if (center.x < -c.w * cam.scale || center.x > w + c.w * cam.scale || center.y < -c.d * cam.scale || center.y > h + c.d * cam.scale) return;
+      ctx.save(); ctx.fillStyle = '#dbe7e2'; ctx.strokeStyle = '#a9c0bb'; ctx.lineWidth = 0.65; ctx.globalAlpha = 0.58;
+      for (let i = 0; i < c.puff; i++) {
+        const q = R.P(c.x + (i - (c.puff - 1) / 2) * c.w * 0.22, c.y + (i % 2) * 1.3, c.z);
+        ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(3, c.w * cam.scale * (i % 2 ? 0.12 : 0.16)), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
+    });
+    atmosphere.birds.forEach(function (b) {
+      if (G.rot({ x: b.x, y: b.y, z: b.z }, cam).z <= 0) return;
+      const q = R.P(b.x, b.y, b.z);
+      if (q.x < -20 || q.x > w + 20 || q.y < -20 || q.y > h + 20) return;
+      const s = b.s * cam.scale * 0.42;
+      S.strokePath(ctx, pens.hair, [{ x: q.x - s, y: q.y }, { x: q.x - s * 0.32, y: q.y - s * (0.45 + b.wing) }, { x: q.x, y: q.y }], { lod: lod, width: 1.25, alpha: 0.9 });
+      S.strokePath(ctx, pens.hair, [{ x: q.x, y: q.y }, { x: q.x + s * 0.34, y: q.y - s * (0.48 - b.wing) }, { x: q.x + s, y: q.y }], { lod: lod, width: 1.25, alpha: 0.9 });
+    });
     for (let z = -55; z <= 55; z += 11) {
       const pts = [];
       for (let i = 0; i <= 16; i++) { const x = 25 + i * 4; pts.push({ x: x, z: z + Math.sin(i * 0.65 + z) * 1.5 }); }
@@ -236,7 +279,7 @@
     const sorted = city.buildings.slice().sort(function (a, b) { return G.rot({ x: a.x, y: a.elevation, z: a.z }, cam).z - G.rot({ x: b.x, y: b.elevation, z: b.z }, cam).z; });
     sorted.forEach(function (b) {
       const bp = AD.building.generate(b.seed, { mood: b.mood, density: opts.density || 0.78, monumentality: (opts.monumentality || 1) * b.scale });
-      AD.building.render(ctx, bp, { cam: cam, yaw: opts.yaw, pitch: opts.pitch, opaqueWalls: true, origin: { x: b.x, y: b.elevation, z: b.z }, rotation: b.rotation }, { x: 0, y: 0, w: w, h: h, pad: 0.08 }, lod);
+      AD.building.render(ctx, bp, { cam: cam, yaw: opts.yaw, pitch: opts.pitch, opaqueWalls: true, cityMode: true, origin: { x: b.x, y: b.elevation, z: b.z }, rotation: b.rotation }, { x: 0, y: 0, w: w, h: h, pad: 0.08 }, lod);
     });
     const civic = city.civic;
     if (civic.active) {

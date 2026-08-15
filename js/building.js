@@ -743,7 +743,7 @@
       });
     }
 
-    if (plan.site.birds && lod >= 0.5) {
+    if (plan.site.birds && lod >= 0.5 && !view.cityMode) {
       AD.site.birds(ctx, pens, siteRng, p, {
         x0: rect.x, y0: rect.y, w: rect.w, h: rect.h * 0.5
       });
