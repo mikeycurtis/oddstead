@@ -275,15 +275,28 @@
       ctx.restore();
     }
 
+    const groupsByKey = Object.create(null);
+    strokes.forEach(function (stroke) {
+      const key = stroke.group == null ? 'header' : 'cell-' + stroke.group;
+      (groupsByKey[key] || (groupsByKey[key] = [])).push(stroke);
+    });
+    const groups = Object.keys(groupsByKey).sort(function (a, b) {
+      if (a === 'header') return -1;
+      if (b === 'header') return 1;
+      return Number(a.slice(5)) - Number(b.slice(5));
+    }).map(function (key) { return groupsByKey[key]; });
+    const maxGroupStrokes = groups.reduce(function (max, group) { return Math.max(max, group.length); }, 0);
     const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    const duration = Math.max(3500, Math.min(10000, strokes.length * 14));
+    const duration = Math.max(3500, Math.min(10000, maxGroupStrokes * 14));
     el.animate.textContent = 'Stop animation';
     status('drawing 0/' + strokes.length + '…', true);
 
     function frame(nowTime) {
       const nowValue = nowTime == null ? Date.now() : nowTime;
       const raw = Math.max(0, Math.min(1, (nowValue - started) / duration));
-      const count = Math.min(strokes.length, Math.max(0, Math.floor(raw * strokes.length)));
+      const count = Math.min(maxGroupStrokes, Math.max(0, Math.floor(raw * maxGroupStrokes)));
+      let drawn = 0;
+      let currentTip = null;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       AD.paper.base(ctx, cssW, cssH, AD.rng.makeRng(state.seed + ':animation-paper'));
       // Keep final color fills and paper-backed walls hidden until the ink is mostly complete.
@@ -295,10 +308,14 @@
         ctx.drawImage(off, 0, 0, off.width, off.height, 0, 0, cssW, cssH);
         ctx.restore();
       }
-      for (let i = 0; i < count; i++) drawCapturedStroke(strokes[i]);
-      if (count > 0 && count < strokes.length) {
-        const current = strokes[count - 1];
-        const tip = current.left[Math.floor(current.left.length * 0.5)];
+      groups.forEach(function (group) {
+        const n = Math.min(group.length, count);
+        drawn += n;
+        for (let i = 0; i < n; i++) drawCapturedStroke(group[i]);
+        if (n > 0 && n < group.length) currentTip = group[n - 1];
+      });
+      if (currentTip) {
+        const tip = currentTip.left[Math.floor(currentTip.left.length * 0.5)];
         if (tip) {
           ctx.save();
           ctx.fillStyle = 'rgba(214, 58, 92, 0.8)';
@@ -310,7 +327,7 @@
       }
 
       if (raw < 1 && animationId !== 0) {
-        status('drawing ' + count + '/' + strokes.length + '…', true);
+        status('drawing ' + drawn + '/' + strokes.length + '…', true);
         animationId = requestAnimationFrame(frame);
       } else {
         ctx.setTransform(1, 0, 0, 1, 0, 0);

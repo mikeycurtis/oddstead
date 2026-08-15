@@ -120,6 +120,7 @@
       opaqueWalls: !!o.view.opaqueWalls
     };
     let plan = null;
+    S.setCaptureGroup(i);
     try {
       plan = AD.building.generate(seed, { mood: o.mood, density: o.density });
       AD.building.render(ctx, plan, view, rect, lod);
@@ -142,6 +143,7 @@
       ctx.fillText(label, rect.x + (rect.w - tw) / 2, rect.y + rect.h + 11);
       ctx.restore();
     }
+    S.setCaptureGroup(null);
   }
 
   NS.create = create;
