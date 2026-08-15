@@ -66,7 +66,10 @@
       for (let c = 0; c < L.cols; c++) {
         if (r === 0 && cfg.hasDoor && c === cfg.doorBay) continue;
         if (cfg.skip && rng.chance(cfg.skip)) continue;
-        drawWindow(ctx, frame, pens, rng, p, cfg, L, r, c, variant);
+        const q = drawWindow(ctx, frame, pens, rng, p, cfg, L, r, c, variant);
+        if (cfg.windowBoxP && p.lod >= 0.7 && rng.chance(cfg.windowBoxP)) {
+          AD.details.vegetation.windowBox(ctx, q, pens, rng, p);
+        }
       }
       if (cfg.floorLines && r > 0 && p.lod >= 0.6) floorLine(ctx, frame, pens, p, L.v0(r));
     }
@@ -143,8 +146,8 @@
           const u0 = L.u0(c) + L.cellW * (1 - wu) * 0.5;
           const v0 = L.v0(r) + L.bandH * 0.02;
           const q = frame.quad(u0, v0, u0 + L.cellW * wu, v0 + L.bandH * 0.34);
-          DET.railings[cfg.railing](ctx, q, pens, rng, p);
-          if (rng.chance(0.25) && p.lod >= 0.7) {
+          (DET.railings[cfg.railing] || DET.railings.bars)(ctx, q, pens, rng, p);
+          if (p.lod >= 0.7 && rng.chance(cfg.windowBoxP == null ? 0.25 : cfg.windowBoxP)) {
             DET.vegetation.windowBox(ctx, q, pens, rng, p);
           }
         }
@@ -177,15 +180,308 @@
     if (cfg.hasDoor) drawDoor(ctx, frame, pens, rng, p, cfg, L);
   }
 
+  // --- shared pieces --------------------------------------------------------
+
+  /** A pierced screen laid into any projected quad. Also used as an ornament. */
+  function latticePanel(ctx, q, pens, rng, p, opts) {
+    opts = opts || {};
+    if (!S.quadOk(q)) return;
+    const size = S.quadSize(q);
+    const cols = opts.cols || clamp(Math.round(size.w / 11), 2, 9);
+    const rows = opts.rows || clamp(Math.round(size.h / 11), 1, 7);
+    if (opts.accent && p.lod >= 0.5) S.accentFill(ctx, q, opts.accent, rng, { alpha: 0.2 });
+    S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: opts.width || 0.85 });
+    if (p.lod < 0.45) return;
+    for (let c = 1; c < cols; c++) {
+      S.strokePath(ctx, pens.hair, [S.quadPt(q, c / cols, 0.03), S.quadPt(q, c / cols, 0.97)],
+        { lod: p.lod, alpha: 0.85 });
+    }
+    for (let r = 1; r < rows; r++) {
+      S.strokePath(ctx, pens.hair, [S.quadPt(q, 0.02, r / rows), S.quadPt(q, 0.98, r / rows)],
+        { lod: p.lod, alpha: 0.85 });
+    }
+    if (opts.diagonal && p.lod >= 0.65) {
+      for (let c = 0; c < cols; c++) {
+        S.strokePath(ctx, pens.hair,
+          [S.quadPt(q, c / cols, 0.02), S.quadPt(q, (c + 1) / cols, 0.98)],
+          { lod: p.lod, alpha: 0.5 });
+        S.strokePath(ctx, pens.hair,
+          [S.quadPt(q, c / cols, 0.98), S.quadPt(q, (c + 1) / cols, 0.02)],
+          { lod: p.lod, alpha: 0.5 });
+      }
+    }
+  }
+
+  /** Post with a simple cap, base and head bracket — verandas and colonnades. */
+  function post(ctx, frame, pens, p, u, v0, v1, w, opts) {
+    opts = opts || {};
+    const q = frame.quad(u - w / 2, v0, u + w / 2, v1);
+    if (!S.quadOk(q)) return null;
+    S.strokePath(ctx, pens.detail, [S.quadPt(q, 0, 0), S.quadPt(q, 0, 1)], { lod: p.lod, width: 0.85 });
+    S.strokePath(ctx, pens.detail, [S.quadPt(q, 1, 0), S.quadPt(q, 1, 1)], { lod: p.lod, width: 0.85 });
+    if (p.lod >= 0.55) {
+      // capital and base blocks
+      S.strokePoly(ctx, pens.hair, S.subQuad(q, -0.55, 0.94, 1.55, 1), { lod: p.lod });
+      S.strokePoly(ctx, pens.hair, S.subQuad(q, -0.45, 0, 1.45, 0.05), { lod: p.lod });
+    }
+    if (opts.bracket && p.lod >= 0.65) {
+      const b = opts.bracketSpan == null ? 0.7 : opts.bracketSpan;
+      S.strokePath(ctx, pens.hair,
+        [S.quadPt(q, -b, 0.99), S.quadPt(q, 0.1, 0.9)], { lod: p.lod, alpha: 0.9 });
+      S.strokePath(ctx, pens.hair,
+        [S.quadPt(q, 1 + b, 0.99), S.quadPt(q, 0.9, 0.9)], { lod: p.lod, alpha: 0.9 });
+    }
+    if (opts.flute && p.lod >= 0.7) {
+      S.strokePath(ctx, pens.hair, [S.quadPt(q, 0.5, 0.07), S.quadPt(q, 0.5, 0.92)],
+        { lod: p.lod, alpha: 0.6 });
+    }
+    return q;
+  }
+
+  /** Windows for the floors above a special ground storey. */
+  function upperFloors(ctx, frame, pens, rng, p, cfg, L, from) {
+    for (let r = from; r < L.rows; r++) {
+      const variant = (r === L.rows - 1 && cfg.altWin) ? cfg.altWin : cfg.win;
+      for (let c = 0; c < L.cols; c++) {
+        if (cfg.skip && rng.chance(cfg.skip)) continue;
+        drawWindow(ctx, frame, pens, rng, p, cfg, L, r, c, variant);
+      }
+      if (cfg.floorLines && r > from && p.lod >= 0.6) floorLine(ctx, frame, pens, p, L.v0(r));
+    }
+  }
+
+  // --- new systems ----------------------------------------------------------
+
+  /** Deep shaded veranda across the ground storey, rooms above. */
+  function facadeVeranda(ctx, frame, pens, rng, p, cfg) {
+    const L = layout(cfg);
+    const vTop = L.rows > 1 ? L.v0(1) - L.bandH * 0.1 : 0.86;
+    const vBase = cfg.marginBottom * 0.2;
+    const bays = clamp(cfg.posts || L.cols, 2, 8);
+
+    // shade behind the posts, then the opening it belongs to
+    if (p.lod >= 0.45) {
+      S.hatchQuad(ctx, pens.hatch, frame.quad(cfg.marginU * 0.6, vBase, 1 - cfg.marginU * 0.6, vTop), {
+        angle: -1.1, gap: 0.11, lod: p.lod, alpha: 0.42, max: p.lod >= 0.8 ? 14 : 6
+      });
+    }
+    if (cfg.hasDoor) drawDoor(ctx, frame, pens, rng, p, cfg, L);
+
+    const u0 = cfg.marginU * 0.5, u1 = 1 - cfg.marginU * 0.5;
+    const step = (u1 - u0) / bays;
+    const railV = vBase + (vTop - vBase) * 0.34;
+    for (let i = 0; i <= bays; i++) {
+      const u = u0 + step * i;
+      post(ctx, frame, pens, p, u, vBase, vTop, 0.022, { bracket: true, bracketSpan: 0.9 });
+      if (i < bays && p.lod >= 0.5) {
+        const q = frame.quad(u + 0.012, vBase + (vTop - vBase) * 0.06, u + step - 0.012, railV);
+        if (S.quadOk(q)) {
+          (AD.details.railings[cfg.railing] || AD.details.railings.bars)(ctx, q, pens, rng, p);
+          if (p.lod >= 0.7 && rng.chance(cfg.potP == null ? 0.25 : cfg.potP)) {
+            AD.details.vegetation.potted(ctx, q, pens, rng, p);
+          }
+        }
+      }
+    }
+    // veranda floor and its head beam
+    S.strokePath(ctx, pens.detail, [frame.pt(u0 - 0.03, vBase), frame.pt(u1 + 0.03, vBase)],
+      { lod: p.lod, width: 0.9 });
+    S.strokePath(ctx, pens.detail, [frame.pt(u0 - 0.04, vTop), frame.pt(u1 + 0.04, vTop)],
+      { lod: p.lod, width: 0.95 });
+    if (p.lod >= 0.55) {
+      S.strokePath(ctx, pens.hair,
+        [frame.pt(u0 - 0.04, vTop + 0.016), frame.pt(u1 + 0.04, vTop + 0.016)],
+        { lod: p.lod, alpha: 0.8 });
+    }
+    upperFloors(ctx, frame, pens, rng, p, cfg, L, 1);
+  }
+
+  /** Window bands veiled by pierced screens. */
+  function facadeScreened(ctx, frame, pens, rng, p, cfg) {
+    const L = layout(cfg);
+    const screenP = cfg.screenP == null ? 0.5 : cfg.screenP;
+    for (let r = 0; r < L.rows; r++) {
+      const variant = (r === L.rows - 1 && cfg.altWin) ? cfg.altWin : cfg.win;
+      const screened = rng.chance(screenP) && !(r === 0 && cfg.hasDoor);
+      if (screened) {
+        // one continuous screen spanning the bays of this floor
+        const v0 = L.v0(r) + L.bandH * 0.16;
+        const v1 = L.v0(r) + L.bandH * 0.84;
+        const q = frame.quad(cfg.marginU, v0, 1 - cfg.marginU, v1);
+        latticePanel(ctx, q, pens, rng, p, {
+          diagonal: cfg.screenDiagonal, accent: p.glassAccent,
+          cols: clamp(L.cols * 3, 3, 12)
+        });
+        if (p.lod >= 0.6) {
+          // framing rails top and bottom
+          S.strokePath(ctx, pens.hair, [frame.pt(cfg.marginU * 0.8, v1 + 0.012),
+            frame.pt(1 - cfg.marginU * 0.8, v1 + 0.012)], { lod: p.lod, alpha: 0.8 });
+        }
+      } else {
+        for (let c = 0; c < L.cols; c++) {
+          if (r === 0 && cfg.hasDoor && c === cfg.doorBay) continue;
+          drawWindow(ctx, frame, pens, rng, p, cfg, L, r, c, variant);
+        }
+      }
+      if (cfg.floorLines && r > 0 && p.lod >= 0.6) floorLine(ctx, frame, pens, p, L.v0(r));
+    }
+    if (cfg.hasDoor) drawDoor(ctx, frame, pens, rng, p, cfg, L);
+  }
+
+  /** Exposed frame: posts, rails, braced panels, small openings between. */
+  function facadeTimberFrame(ctx, frame, pens, rng, p, cfg) {
+    const L = layout(cfg);
+    const braceP = cfg.braceP == null ? 0.35 : cfg.braceP;
+    const postW = 0.018;
+
+    for (let r = 0; r < L.rows; r++) {
+      const v0 = L.v0(r), v1 = L.v0(r) + L.bandH;
+      // sill and head rails for the storey
+      S.strokePath(ctx, pens.detail, [frame.pt(0.02, v0), frame.pt(0.98, v0)],
+        { lod: p.lod, width: 0.85 });
+      for (let c = 0; c <= L.cols; c++) {
+        const u = clamp(L.u0(c), 0.02, 0.98);
+        const q = frame.quad(u - postW / 2, v0, u + postW / 2, v1);
+        if (!S.quadOk(q)) continue;
+        S.strokePath(ctx, pens.detail, [S.quadPt(q, 0, 0), S.quadPt(q, 0, 1)],
+          { lod: p.lod, width: 0.8 });
+        if (p.lod >= 0.5) {
+          S.strokePath(ctx, pens.hair, [S.quadPt(q, 1, 0), S.quadPt(q, 1, 1)], { lod: p.lod, alpha: 0.8 });
+        }
+      }
+      for (let c = 0; c < L.cols; c++) {
+        const panel = frame.quad(L.u0(c) + postW, v0 + L.bandH * 0.06,
+          L.u0(c) + L.cellW - postW, v1 - L.bandH * 0.06);
+        if (!S.quadOk(panel)) continue;
+        const isDoor = r === 0 && cfg.hasDoor && c === cfg.doorBay;
+        if (!isDoor && p.lod >= 0.6 && rng.chance(braceP)) {
+          // diagonal brace across the panel
+          const dir = rng.chance(0.5);
+          S.strokePath(ctx, pens.hair, [
+            S.quadPt(panel, dir ? 0.04 : 0.96, 0.04), S.quadPt(panel, dir ? 0.96 : 0.04, 0.96)
+          ], { lod: p.lod, alpha: 0.9, width: 1.1 });
+        } else if (!isDoor && p.lod >= 0.55 && rng.chance(0.3)) {
+          // boarded infill
+          S.hatchQuad(ctx, pens.hatch, panel, {
+            angle: 1.5, gap: 0.2, lod: p.lod, alpha: 0.35, max: 6
+          });
+        }
+        if (!isDoor && rng.chance(0.72)) {
+          drawWindow(ctx, frame, pens, rng, p, cfg, L, r, c,
+            (r === L.rows - 1 && cfg.altWin) ? cfg.altWin : cfg.win);
+        }
+      }
+    }
+    S.strokePath(ctx, pens.detail, [frame.pt(0.02, L.v0(L.rows)), frame.pt(0.98, L.v0(L.rows))],
+      { lod: p.lod, width: 0.85 });
+    if (cfg.hasDoor) drawDoor(ctx, frame, pens, rng, p, cfg, L);
+  }
+
+  /** Vertical piers with recessed spandrels between them. */
+  function facadeDecoBanded(ctx, frame, pens, rng, p, cfg) {
+    const L = layout(cfg);
+    const piers = clamp(L.cols + 1, 3, 9);
+    const uA = cfg.marginU * 0.7, uB = 1 - cfg.marginU * 0.7;
+    const step = (uB - uA) / (piers - 1);
+    const vTop = L.v0(L.rows);
+
+    for (let i = 0; i < piers; i++) {
+      const u = uA + step * i;
+      const q = frame.quad(u - 0.016, cfg.marginBottom * 0.4, u + 0.016, vTop + 0.02);
+      if (!S.quadOk(q)) continue;
+      S.strokePath(ctx, pens.detail, [S.quadPt(q, 0, 0), S.quadPt(q, 0, 1)], { lod: p.lod, width: 0.9 });
+      S.strokePath(ctx, pens.detail, [S.quadPt(q, 1, 0), S.quadPt(q, 1, 1)], { lod: p.lod, width: 0.9 });
+      if (p.lod >= 0.6) {
+        // the pier steps up past the wall head
+        S.strokePoly(ctx, pens.hair, S.subQuad(q, 0.15, 1, 0.85, 1.03), { lod: p.lod });
+        S.strokePath(ctx, pens.hair, [S.quadPt(q, 0.5, 0.04), S.quadPt(q, 0.5, 0.99)],
+          { lod: p.lod, alpha: 0.5 });
+      }
+    }
+
+    // glazing strips between the piers, with a spandrel under each
+    for (let i = 0; i < piers - 1; i++) {
+      for (let r = 0; r < L.rows; r++) {
+        if (r === 0 && cfg.hasDoor) continue;
+        const u0 = uA + step * i + 0.02, u1 = uA + step * (i + 1) - 0.02;
+        const v0 = L.v0(r) + L.bandH * 0.26, v1 = L.v0(r) + L.bandH * 0.86;
+        const q = frame.quad(u0, v0, u1, v1);
+        if (!S.quadOk(q)) continue;
+        const fn = OP.windows[cfg.win] && cfg.win !== 'ribbon' ? OP.windows[cfg.win] : OP.windows.ribbon;
+        fn(ctx, q, pens, rng, p);
+        if (p.lod >= 0.65) {
+          const sp = frame.quad(u0, L.v0(r) + L.bandH * 0.04, u1, v0 - L.bandH * 0.04);
+          if (S.quadOk(sp)) {
+            if (p.trimAccent) S.accentFill(ctx, sp, p.trimAccent, rng, { alpha: 0.2 });
+            S.strokePoly(ctx, pens.hair, sp, { lod: p.lod });
+            const n = rng.int(2, 4);
+            for (let k = 0; k < n; k++) {
+              const a = 0.1 + (0.8 * k) / n, b = a + 0.8 / n;
+              S.strokePath(ctx, pens.hair, [
+                S.quadPt(sp, a, 0.2), S.quadPt(sp, (a + b) / 2, 0.8), S.quadPt(sp, b, 0.2)
+              ], { lod: p.lod, alpha: 0.75 });
+            }
+          }
+        }
+      }
+    }
+    if (cfg.hasDoor) drawDoor(ctx, frame, pens, rng, p, cfg, L);
+  }
+
+  /** Free-standing columns carrying an entablature, rooms behind. */
+  function facadeColonnade(ctx, frame, pens, rng, p, cfg) {
+    const L = layout(cfg);
+    const storeys = L.rows > 3 ? 2 : 1;
+    const vTop = Math.min(0.9, L.v0(storeys) - L.bandH * 0.08);
+    const vBase = cfg.marginBottom * 0.2;
+    const cols = clamp(cfg.posts || L.cols + 1, 3, 9);
+
+    if (p.lod >= 0.45) {
+      S.hatchQuad(ctx, pens.hatch, frame.quad(cfg.marginU * 0.6, vBase, 1 - cfg.marginU * 0.6, vTop), {
+        angle: -1.05, gap: 0.1, lod: p.lod, alpha: 0.4, max: p.lod >= 0.8 ? 14 : 6
+      });
+    }
+    if (cfg.hasDoor) drawDoor(ctx, frame, pens, rng, p, cfg, L);
+
+    const uA = cfg.marginU * 0.6, uB = 1 - cfg.marginU * 0.6;
+    const step = (uB - uA) / (cols - 1);
+    for (let i = 0; i < cols; i++) {
+      post(ctx, frame, pens, p, uA + step * i, vBase, vTop, 0.03, { flute: true });
+    }
+    // entablature: architrave, frieze line, dentils
+    S.strokePath(ctx, pens.detail, [frame.pt(uA - 0.04, vTop), frame.pt(uB + 0.04, vTop)],
+      { lod: p.lod, width: 1 });
+    S.strokePath(ctx, pens.detail,
+      [frame.pt(uA - 0.045, vTop + 0.022), frame.pt(uB + 0.045, vTop + 0.022)],
+      { lod: p.lod, width: 0.8 });
+    if (p.lod >= 0.65) {
+      const n = clamp(Math.round(frame.pxWidth / 14), 4, 24);
+      for (let i = 0; i <= n; i++) {
+        const u = uA + ((uB - uA) * i) / n;
+        S.strokePath(ctx, pens.hair, [frame.pt(u, vTop + 0.004), frame.pt(u, vTop + 0.02)],
+          { lod: p.lod, alpha: 0.75 });
+      }
+    }
+    upperFloors(ctx, frame, pens, rng, p, cfg, L, storeys);
+  }
+
   NS.systems = {
     grid: facadeGrid,
     arcade: facadeArcade,
     solid: facadeSolid,
     balconyGrid: facadeBalconyGrid,
-    ribbonGrid: facadeRibbon
+    ribbonGrid: facadeRibbon,
+    veranda: facadeVeranda,
+    screened: facadeScreened,
+    timberFrame: facadeTimberFrame,
+    decoBanded: facadeDecoBanded,
+    colonnade: facadeColonnade
   };
-  NS.systemNames = ['grid', 'arcade', 'solid', 'balconyGrid', 'ribbonGrid'];
+  NS.systemNames = ['grid', 'arcade', 'solid', 'balconyGrid', 'ribbonGrid',
+    'veranda', 'screened', 'timberFrame', 'decoBanded', 'colonnade'];
   NS.layout = layout;
+  NS.latticePanel = latticePanel;
+  NS.post = post;
 
   const root = typeof window !== 'undefined' ? window : globalThis;
   root.AD = root.AD || {};

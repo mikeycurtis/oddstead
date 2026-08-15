@@ -145,15 +145,226 @@
     if (p.lod >= 0.6) sill(ctx, q, pens, rng, p);
   }
 
+  // --- alternative arch profiles -------------------------------------------
+  // Both are drawn in the quad's UV, so they foreshorten with the wall like
+  // everything else. `uvHorseshoe` bulges past its springing line and tucks
+  // back in; `uvPointed` rises to an apex on two swung curves.
+  function uvHorseshoe(q, u0, u1, vSpring, vTop, segs, ext) {
+    const n = segs || 14;
+    const e = ext == null ? 0.42 : ext;
+    const uc = (u0 + u1) / 2, ur = (u1 - u0) / 2;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const a = (Math.PI + e) - ((Math.PI + 2 * e) * i) / n;
+      pts.push(Q(q, uc + Math.cos(a) * ur, vSpring + Math.sin(a) * (vTop - vSpring)));
+    }
+    return pts;
+  }
+
+  function uvPointed(q, u0, u1, vSpring, vTop, segs) {
+    const n = Math.max(4, segs || 12);
+    const uc = (u0 + u1) / 2;
+    const pts = [];
+    const half = function (uA, cU) {
+      const out = [];
+      for (let i = 0; i <= n / 2; i++) {
+        const t = i / (n / 2);
+        const it = 1 - t;
+        out.push(Q(q,
+          it * it * uA + 2 * t * it * cU + t * t * uc,
+          it * it * vSpring + 2 * t * it * vTop + t * t * vTop));
+      }
+      return out;
+    };
+    const left = half(u0, u0);
+    const right = half(u1, u1).reverse();
+    for (let i = 0; i < left.length; i++) pts.push(left[i]);
+    for (let i = 1; i < right.length; i++) pts.push(right[i]);
+    return pts;
+  }
+
+  /** Springing point of a horseshoe arch, in UV — where the jamb meets it. */
+  function horseshoeFoot(vSpring, vTop, ext) {
+    const e = ext == null ? 0.42 : ext;
+    return { v: vSpring - Math.sin(e) * (vTop - vSpring), du: Math.cos(e) };
+  }
+
+  // --- lattice / screened opening ------------------------------------------
+  // A pierced screen across the opening: fine grid, sometimes crossed on the
+  // diagonal. Reads as shoji, jali or mashrabiya depending on its company.
+  function windowLattice(ctx, q, pens, rng, p) {
+    if (tiny(q, 6)) { windowPlain(ctx, q, pens, rng, p); return; }
+    const inner = sub(q, 0.06, 0.05, 0.94, 0.95);
+    if (p.glassAccent) S.accentFill(ctx, inner, p.glassAccent, rng, { alpha: 0.18 });
+    S.strokePoly(ctx, pens.detail, q, { lod: p.lod });
+    if (p.lod >= 0.45) S.strokePoly(ctx, pens.hair, inner, { lod: p.lod });
+    if (p.lod < 0.5) return;
+    const size = S.quadSize(q);
+    const cols = Math.max(2, Math.min(5, Math.round(size.w / 9)));
+    const rows = Math.max(2, Math.min(6, Math.round(size.h / 9)));
+    const diagonal = rng.chance(0.35) && p.lod >= 0.7;
+    for (let c = 1; c < cols; c++) {
+      S.strokePath(ctx, pens.hair, [Q(inner, c / cols, 0), Q(inner, c / cols, 1)],
+        { lod: p.lod, alpha: 0.9 });
+    }
+    for (let r = 1; r < rows; r++) {
+      S.strokePath(ctx, pens.hair, [Q(inner, 0, r / rows), Q(inner, 1, r / rows)],
+        { lod: p.lod, alpha: 0.9 });
+    }
+    if (diagonal) {
+      for (let c = 0; c < cols; c++) {
+        S.strokePath(ctx, pens.hair,
+          [Q(inner, c / cols, 0), Q(inner, (c + 1) / cols, 1)], { lod: p.lod, alpha: 0.55 });
+        S.strokePath(ctx, pens.hair,
+          [Q(inner, c / cols, 1), Q(inner, (c + 1) / cols, 0)], { lod: p.lod, alpha: 0.55 });
+      }
+    }
+    if (p.lod >= 0.55) sill(ctx, q, pens, rng, p);
+  }
+
+  // --- horseshoe / pointed arched opening in a rectangular surround --------
+  function windowHorseshoe(ctx, q, pens, rng, p) {
+    if (tiny(q, 7)) { windowArched(ctx, q, pens, rng, p); return; }
+    const pointed = rng.chance(0.42);
+    const vSpring = rng.range(0.5, 0.62);
+    const segs = p.lod >= 0.6 ? 16 : 8;
+    const foot = pointed ? { v: vSpring, du: 1 } : horseshoeFoot(vSpring, 1);
+    const uL = 0.5 - 0.5 * foot.du, uR = 0.5 + 0.5 * foot.du;
+
+    glass(ctx, q, pens, rng, p, [0.08, 0.04, 0.92, vSpring]);
+    S.strokePath(ctx, pens.detail, [Q(q, uL, 0), Q(q, uL, foot.v)], { lod: p.lod });
+    S.strokePath(ctx, pens.detail, [Q(q, uR, 0), Q(q, uR, foot.v)], { lod: p.lod });
+    S.strokePath(ctx, pens.detail,
+      pointed ? uvPointed(q, 0, 1, vSpring, 0.97, segs)
+        : uvHorseshoe(q, 0, 1, vSpring, 0.97, segs),
+      { lod: p.lod });
+    S.strokePath(ctx, pens.detail, [Q(q, -0.06, 0), Q(q, 1.06, 0)], { lod: p.lod, width: 0.85 });
+    if (p.lod >= 0.55) {
+      // rectangular surround band around the arch
+      S.strokePath(ctx, pens.hair, [
+        Q(q, -0.12, 0), Q(q, -0.12, 1.08), Q(q, 1.12, 1.08), Q(q, 1.12, 0)
+      ], { lod: p.lod, alpha: 0.75 });
+    }
+    if (p.lod >= 0.65 && rng.chance(0.6)) {
+      // voussoir ticks radiating from the arch
+      const n = rng.int(4, 7);
+      for (let i = 1; i < n; i++) {
+        const a = Math.PI - (Math.PI * i) / n;
+        const uu = 0.5 + Math.cos(a) * 0.5, vv = vSpring + Math.sin(a) * (0.97 - vSpring);
+        S.strokePath(ctx, pens.hair,
+          [Q(q, uu, vv), Q(q, 0.5 + (uu - 0.5) * 1.16, vSpring + (vv - vSpring) * 1.16)],
+          { lod: p.lod, alpha: 0.7 });
+      }
+    }
+  }
+
+  // --- stepped-head bay, vertical emphasis ----------------------------------
+  function windowDecoBay(ctx, q, pens, rng, p) {
+    if (tiny(q, 6)) { windowPlain(ctx, q, pens, rng, p); return; }
+    const shoulder = rng.range(0.1, 0.17);
+    const head = 1 - shoulder;
+    const body = sub(q, 0.12, 0, 0.88, head);
+    glass(ctx, body, pens, rng, p);
+    S.strokePoly(ctx, pens.detail, body, { lod: p.lod });
+    // stepped head: two shoulders climbing to a narrow crown
+    const steps = rng.int(2, 3);
+    for (let i = 1; i <= steps; i++) {
+      const inset = 0.12 + (0.26 * i) / steps;
+      const v0 = head + (shoulder * (i - 1)) / steps;
+      const v1 = head + (shoulder * i) / steps;
+      S.strokePoly(ctx, pens.detail, sub(q, inset, v0, 1 - inset, v1),
+        { lod: p.lod, width: 0.8 });
+    }
+    if (p.lod >= 0.6) {
+      // fluting either side, and a mullion pair
+      [0.04, 0.92].forEach(function (u) {
+        S.strokePath(ctx, pens.hair, [Q(q, u, 0.02), Q(q, u, head + shoulder * 0.4)],
+          { lod: p.lod, alpha: 0.8 });
+        S.strokePath(ctx, pens.hair, [Q(q, u + 0.035, 0.02), Q(q, u + 0.035, head)],
+          { lod: p.lod, alpha: 0.6 });
+      });
+      S.strokePath(ctx, pens.hair, [Q(body, 0.5, 0.03), Q(body, 0.5, 0.97)], { lod: p.lod });
+    }
+    if (p.lod >= 0.5) sill(ctx, q, pens, rng, p);
+  }
+
+  // --- hooded opening: a projecting sunshade over the head ------------------
+  function windowHooded(ctx, q, pens, rng, p) {
+    if (tiny(q, 6)) { windowPlain(ctx, q, pens, rng, p); return; }
+    const vHead = rng.range(0.72, 0.82);
+    const body = sub(q, 0, 0, 1, vHead);
+    glass(ctx, body, pens, rng, p);
+    S.strokePoly(ctx, pens.detail, body, { lod: p.lod });
+    if (p.lod >= 0.5) {
+      const bars = rng.int(1, 3);
+      for (let i = 1; i <= bars; i++) {
+        S.strokePath(ctx, pens.hair, [Q(body, i / (bars + 1), 0.04), Q(body, i / (bars + 1), 0.96)],
+          { lod: p.lod, alpha: 0.85 });
+      }
+    }
+    // the hood itself: a wide slab oversailing the opening
+    const hood = [Q(q, -0.2, vHead + 0.02), Q(q, 1.2, vHead + 0.02),
+      Q(q, 1.12, 1.02), Q(q, -0.12, 1.02)];
+    if (p.trimAccent) S.accentFill(ctx, hood, p.trimAccent, rng, { alpha: 0.24 });
+    S.strokePoly(ctx, pens.detail, hood, { lod: p.lod, width: 0.9 });
+    if (p.lod >= 0.6) {
+      S.hatchQuad(ctx, pens.hatch, hood, {
+        angle: 1.5, gap: 0.13, lod: p.lod, alpha: 0.45, max: 8
+      });
+      // brackets carrying it
+      [0.05, 0.95].forEach(function (u) {
+        S.strokePath(ctx, pens.hair,
+          [Q(q, u, vHead - 0.12), Q(q, u < 0.5 ? -0.16 : 1.16, vHead + 0.03)],
+          { lod: p.lod, alpha: 0.85 });
+      });
+    }
+    if (p.lod >= 0.5) sill(ctx, q, pens, rng, p);
+  }
+
+  // --- small-paned timber window with a board frame -------------------------
+  function windowTimberPane(ctx, q, pens, rng, p) {
+    if (tiny(q, 6)) { windowPlain(ctx, q, pens, rng, p); return; }
+    const core = sub(q, 0.1, 0.08, 0.9, 0.9);
+    glass(ctx, core, pens, rng, p);
+    // board casing: outer frame doubled
+    S.strokePoly(ctx, pens.detail, q, { lod: p.lod });
+    S.strokePoly(ctx, pens.detail, core, { lod: p.lod, width: 0.8 });
+    if (p.lod >= 0.5) {
+      const cols = rng.int(2, 3), rows = rng.int(2, 3);
+      for (let c = 1; c < cols; c++) {
+        S.strokePath(ctx, pens.hair, [Q(core, c / cols, 0.02), Q(core, c / cols, 0.98)],
+          { lod: p.lod, alpha: 0.9 });
+      }
+      for (let r = 1; r < rows; r++) {
+        S.strokePath(ctx, pens.hair, [Q(core, 0.02, r / rows), Q(core, 0.98, r / rows)],
+          { lod: p.lod, alpha: 0.9 });
+      }
+    }
+    if (p.lod >= 0.6) {
+      // head board and a deep sill shelf
+      S.strokePath(ctx, pens.detail, [Q(q, -0.14, 1.03), Q(q, 1.14, 1.03)],
+        { lod: p.lod, width: 0.85 });
+      S.strokePath(ctx, pens.hair, [Q(q, -0.14, 1.03), Q(q, -0.1, 0.96)], { lod: p.lod });
+      S.strokePath(ctx, pens.hair, [Q(q, 1.14, 1.03), Q(q, 1.1, 0.96)], { lod: p.lod });
+    }
+    sill(ctx, q, pens, rng, p);
+  }
+
   NS.windows = {
     plain: windowPlain,
     sash: windowSash,
     arched: windowArched,
     shuttered: windowShuttered,
     round: windowRound,
-    ribbon: windowRibbon
+    ribbon: windowRibbon,
+    lattice: windowLattice,
+    horseshoe: windowHorseshoe,
+    decoBay: windowDecoBay,
+    hooded: windowHooded,
+    timberPane: windowTimberPane
   };
-  NS.windowNames = ['plain', 'sash', 'arched', 'shuttered', 'round', 'ribbon'];
+  NS.windowNames = ['plain', 'sash', 'arched', 'shuttered', 'round', 'ribbon',
+    'lattice', 'horseshoe', 'decoBay', 'hooded', 'timberPane'];
 
   // --- doors ----------------------------------------------------------------
 
@@ -245,14 +456,116 @@
     }
   }
 
+  // --- recessed arched gateway in a rectangular surround --------------------
+  function doorGateway(ctx, q, pens, rng, p) {
+    if (tiny(q, 8)) { doorArched(ctx, q, pens, rng, p); return; }
+    const pointed = rng.chance(0.5);
+    const vSpring = rng.range(0.52, 0.64);
+    const segs = p.lod >= 0.6 ? 16 : 8;
+    const surround = sub(q, -0.1, 0, 1.1, 1.02);
+
+    // the surround panel, then the opening cut into it
+    S.strokePath(ctx, pens.detail, [Q(surround, 0, 0), Q(surround, 0, 1)], { lod: p.lod, width: 0.9 });
+    S.strokePath(ctx, pens.detail, [Q(surround, 1, 0), Q(surround, 1, 1)], { lod: p.lod, width: 0.9 });
+    S.strokePath(ctx, pens.detail, [Q(surround, -0.04, 1), Q(surround, 1.04, 1)], { lod: p.lod, width: 0.9 });
+
+    const inner = sub(q, 0.14, 0, 0.86, 0.9);
+    if (p.doorAccent) S.accentFill(ctx, sub(inner, 0.05, 0.02, 0.95, vSpring), p.doorAccent, rng, {});
+    const foot = pointed ? { v: vSpring, du: 1 } : horseshoeFoot(vSpring, 0.98);
+    const uL = 0.5 - 0.5 * foot.du, uR = 0.5 + 0.5 * foot.du;
+    S.strokePath(ctx, pens.detail, [Q(inner, uL, 0), Q(inner, uL, foot.v)], { lod: p.lod });
+    S.strokePath(ctx, pens.detail, [Q(inner, uR, 0), Q(inner, uR, foot.v)], { lod: p.lod });
+    S.strokePath(ctx, pens.detail,
+      pointed ? uvPointed(inner, 0, 1, vSpring, 0.98, segs)
+        : uvHorseshoe(inner, 0, 1, vSpring, 0.98, segs),
+      { lod: p.lod });
+    if (p.lod >= 0.5) {
+      // depth: the reveal reads as shade inside the opening
+      S.hatchQuad(ctx, pens.hatch, sub(inner, 0.12, 0.04, 0.88, vSpring * 0.92), {
+        angle: -1.15, gap: 0.2, lod: p.lod, alpha: 0.5, max: 8
+      });
+      S.strokePath(ctx, pens.hair, [Q(inner, 0.5, 0.04), Q(inner, 0.5, vSpring * 0.9)],
+        { lod: p.lod, alpha: 0.8 });
+    }
+    stepTicks(ctx, q, pens, rng, p);
+  }
+
+  // --- braced plank door under a hood board --------------------------------
+  function doorPlank(ctx, q, pens, rng, p) {
+    if (tiny(q, 5)) { doorPlain(ctx, q, pens, rng, p); return; }
+    const leaf = sub(q, 0.04, 0, 0.96, 0.88);
+    if (p.doorAccent) S.accentFill(ctx, leaf, p.doorAccent, rng, {});
+    S.strokePoly(ctx, pens.detail, leaf, { lod: p.lod });
+    if (p.lod >= 0.5) {
+      const planks = rng.int(3, 6);
+      for (let i = 1; i < planks; i++) {
+        S.strokePath(ctx, pens.hair, [Q(leaf, i / planks, 0.02), Q(leaf, i / planks, 0.98)],
+          { lod: p.lod, alpha: 0.85 });
+      }
+      // ledges and a diagonal brace
+      S.strokePath(ctx, pens.hair, [Q(leaf, 0.02, 0.22), Q(leaf, 0.98, 0.22)], { lod: p.lod });
+      S.strokePath(ctx, pens.hair, [Q(leaf, 0.02, 0.78), Q(leaf, 0.98, 0.78)], { lod: p.lod });
+      if (rng.chance(0.7)) {
+        S.strokePath(ctx, pens.hair, [Q(leaf, 0.04, 0.24), Q(leaf, 0.96, 0.76)], { lod: p.lod });
+      }
+    }
+    // hood board on two brackets
+    const hood = [Q(q, -0.22, 0.9), Q(q, 1.22, 0.9), Q(q, 1.12, 1.02), Q(q, -0.12, 1.02)];
+    if (p.trimAccent) S.accentFill(ctx, hood, p.trimAccent, rng, { alpha: 0.22 });
+    S.strokePoly(ctx, pens.detail, hood, { lod: p.lod, width: 0.9 });
+    if (p.lod >= 0.6) {
+      S.strokePath(ctx, pens.hair, [Q(q, 0.02, 0.74), Q(q, -0.18, 0.9)], { lod: p.lod });
+      S.strokePath(ctx, pens.hair, [Q(q, 0.98, 0.74), Q(q, 1.18, 0.9)], { lod: p.lod });
+      const knob = Q(leaf, 0.88, 0.5);
+      S.strokeEllipse(ctx, pens.hair, knob.x, knob.y, 1.4, 1.4, { lod: p.lod });
+    }
+    stepTicks(ctx, q, pens, rng, p);
+  }
+
+  // --- stepped portal with a fluted leaf ------------------------------------
+  function doorDecoPortal(ctx, q, pens, rng, p) {
+    if (tiny(q, 7)) { doorPlain(ctx, q, pens, rng, p); return; }
+    const rings = rng.int(2, 3);
+    for (let i = 0; i < rings; i++) {
+      const o = 0.06 * (rings - i);
+      S.strokePath(ctx, pens.detail, [
+        Q(q, -o, 0), Q(q, -o, 0.94 + o * 0.5), Q(q, 1 + o, 0.94 + o * 0.5), Q(q, 1 + o, 0)
+      ], { lod: p.lod, width: i === rings - 1 ? 0.95 : 0.75 });
+    }
+    const leaf = sub(q, 0.1, 0, 0.9, 0.86);
+    if (p.doorAccent) S.accentFill(ctx, leaf, p.doorAccent, rng, {});
+    S.strokePoly(ctx, pens.detail, leaf, { lod: p.lod });
+    if (p.lod >= 0.55) {
+      const n = rng.int(3, 6);
+      for (let i = 1; i < n; i++) {
+        S.strokePath(ctx, pens.hair, [Q(leaf, i / n, 0.04), Q(leaf, i / n, 0.96)],
+          { lod: p.lod, alpha: 0.8 });
+      }
+      // chevron over the lintel
+      const cs = rng.int(2, 4);
+      for (let i = 0; i < cs; i++) {
+        const u0 = 0.12 + (0.76 * i) / cs, u1 = u0 + 0.76 / cs;
+        S.strokePath(ctx, pens.hair,
+          [Q(q, u0, 0.88), Q(q, (u0 + u1) / 2, 0.95), Q(q, u1, 0.88)], { lod: p.lod, alpha: 0.85 });
+      }
+    }
+    stepTicks(ctx, q, pens, rng, p);
+  }
+
   NS.doors = {
     plain: doorPlain,
     arched: doorArched,
     dbl: doorDouble,
-    storefront: doorStorefront
+    storefront: doorStorefront,
+    gateway: doorGateway,
+    plank: doorPlank,
+    decoPortal: doorDecoPortal
   };
-  NS.doorNames = ['plain', 'arched', 'dbl', 'storefront'];
+  NS.doorNames = ['plain', 'arched', 'dbl', 'storefront', 'gateway', 'plank', 'decoPortal'];
   NS.uvArc = uvArc;
+  NS.uvHorseshoe = uvHorseshoe;
+  NS.uvPointed = uvPointed;
+  NS.horseshoeFoot = horseshoeFoot;
 
   const root = typeof window !== 'undefined' ? window : globalThis;
   root.AD = root.AD || {};

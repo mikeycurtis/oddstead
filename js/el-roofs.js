@@ -246,14 +246,301 @@
     S.strokePath(ctx, pens.detail, [P(a0[segs]), P(a1[segs])], { lod: p.lod, width: 0.85 });
   }
 
+  // --- broad overhanging eaves ---------------------------------------------
+  // A shallow double-pitch whose eaves reach well past the wall and lift a
+  // little at the ends, with a fascia band and exposed rafter ends beneath.
+  function roofBroadEave(ctx, R, pens, rng, p) {
+    const b = box(R), h = R.roof.h;
+    const alongZ = R.roof.ridgeAxis === 'z';
+    const up = R.roof.upturn == null ? 0.22 : R.roof.upturn;
+    const n = p.lod >= 0.6 ? 6 : 3;
+    const P = function (v) { return R.P(v.x, v.y, v.z); };
+
+    // eave polyline for one slope: lifts quadratically toward both ends
+    const eave = function (sideSign) {
+      const pts = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const lift = up * (2 * t - 1) * (2 * t - 1);
+        if (alongZ) {
+          pts.push(G.v3(sideSign > 0 ? b.x1 : b.x0, b.y + lift, b.z0 + (b.z1 - b.z0) * t));
+        } else {
+          pts.push(G.v3(b.x0 + (b.x1 - b.x0) * t, b.y + lift, sideSign > 0 ? b.z1 : b.z0));
+        }
+      }
+      return pts;
+    };
+    const ridge = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      if (alongZ) {
+        ridge.push(G.v3((b.x0 + b.x1) / 2, b.y + h, b.z0 + (b.z1 - b.z0) * t));
+      } else {
+        ridge.push(G.v3(b.x0 + (b.x1 - b.x0) * t, b.y + h, b.z0 + (b.z1 - b.z0) / 2));
+      }
+    }
+
+    const fascia = Math.max(0.14, Math.min(0.45, h * 0.2));
+    [1, -1].forEach(function (side) {
+      const ev = eave(side);
+      const slope = [ev[0], ev[n], ridge[n], ridge[0]];
+      if (!visiblePlane(R, slope[0], slope[1], slope[2])) return;
+      const q = proj(R, ev.concat(ridge.slice().reverse()));
+      accentPoly(ctx, q, R.roof.accent, rng);
+      slopeHatch(ctx, pens, proj(R, slope), rng, p, R.roof.seamGap * 1.4);
+      S.strokePath(ctx, pens.detail, proj(R, ev), { lod: p.lod, width: 0.95 });
+      // fascia band under the overhang + rafter ends
+      const low = ev.map(function (v) { return G.v3(v.x, v.y - fascia, v.z); });
+      S.strokePath(ctx, pens.detail, proj(R, low), { lod: p.lod, width: 0.8 });
+      if (p.lod >= 0.6) {
+        const step = Math.max(1, Math.round(n / 4));
+        for (let i = 0; i <= n; i += step) {
+          S.strokePath(ctx, pens.hair, [P(ev[i]), P(low[i])], { lod: p.lod, alpha: 0.8 });
+        }
+      }
+    });
+
+    S.strokePath(ctx, pens.outline, proj(R, ridge), { lod: p.lod });
+    // gable ends: ridge tip down to both lifted eave corners
+    const e1 = eave(1), e0 = eave(-1);
+    [[0, ridge[0]], [n, ridge[n]]].forEach(function (end) {
+      const i = end[0], r = end[1];
+      S.strokePath(ctx, pens.detail, [P(e0[i]), P(r)], { lod: p.lod, width: 0.85 });
+      S.strokePath(ctx, pens.detail, [P(e1[i]), P(r)], { lod: p.lod, width: 0.85 });
+      S.strokePath(ctx, pens.hair, [P(e0[i]), P(e1[i])], { lod: p.lod, alpha: 0.7 });
+    });
+  }
+
+  // --- hip planes, shared by hipped-family roofs ---------------------------
+  function hipPlanes(b, h, alongZ, inset) {
+    let ra, rb;
+    if (alongZ) {
+      ra = G.v3((b.x0 + b.x1) / 2, b.y + h, b.z0 + b.d * inset);
+      rb = G.v3((b.x0 + b.x1) / 2, b.y + h, b.z1 - b.d * inset);
+    } else {
+      ra = G.v3(b.x0 + b.w * inset, b.y + h, (b.z0 + b.z1) / 2);
+      rb = G.v3(b.x1 - b.w * inset, b.y + h, (b.z0 + b.z1) / 2);
+    }
+    const c = [
+      G.v3(b.x0, b.y, b.z0), G.v3(b.x1, b.y, b.z0),
+      G.v3(b.x1, b.y, b.z1), G.v3(b.x0, b.y, b.z1)
+    ];
+    const planes = alongZ
+      ? [[c[0], c[3], rb, ra], [c[2], c[1], ra, rb], [c[1], c[0], ra, ra], [c[3], c[2], rb, rb]]
+      : [[c[0], c[1], rb, ra], [c[2], c[3], ra, rb], [c[3], c[0], ra, ra], [c[1], c[2], rb, rb]];
+    return { planes: planes, ra: ra, rb: rb, corners: c };
+  }
+
+  // --- pantiled pitch -------------------------------------------------------
+  // Hipped, but read as a tiled roof: courses run parallel to the eave, the
+  // ridge carries a capping line and the eave shows its tile ends.
+  function roofPantile(ctx, R, pens, rng, p) {
+    const b = box(R), h = R.roof.h;
+    const alongZ = R.roof.ridgeAxis === 'z';
+    const hp = hipPlanes(b, h, alongZ, 0.2);
+    const P = function (v) { return R.P(v.x, v.y, v.z); };
+    const gap = R.roof.tileGap == null ? 0.11 : R.roof.tileGap;
+
+    hp.planes.forEach(function (pl) {
+      if (!visiblePlane(R, pl[0], pl[1], pl[2])) return;
+      const q = proj(R, pl);
+      accentPoly(ctx, q, R.roof.accent, rng);
+      if (p.lod >= 0.5) {
+        // courses parallel to the eave (u runs along the eave in this quad)
+        S.hatchQuad(ctx, pens.hatch, q, {
+          angle: 0.02, gap: gap, lod: p.lod, alpha: 0.55,
+          max: p.lod >= 0.8 ? 9 : 4, jitter: 0.02
+        });
+      }
+      S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: 0.85, overshoot: 0.12 });
+      // tile ends along the eave
+      if (p.lod >= 0.7) {
+        const n = 6;
+        for (let i = 1; i < n; i++) {
+          S.strokePath(ctx, pens.hair,
+            [S.quadPt(q, i / n, 0), S.quadPt(q, i / n, 0.13)], { lod: p.lod, alpha: 0.7 });
+        }
+      }
+    });
+
+    // ridge capping: a doubled line with course ticks
+    const rA = P(hp.ra), rB = P(hp.rb);
+    S.strokePath(ctx, pens.outline, [rA, rB], { lod: p.lod });
+    S.strokePath(ctx, pens.hair, [{ x: rA.x, y: rA.y - 2.2 }, { x: rB.x, y: rB.y - 2.2 }],
+      { lod: p.lod, alpha: 0.75 });
+    if (p.lod >= 0.65) {
+      const n = rng.int(4, 7);
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const x = rA.x + (rB.x - rA.x) * t, y = rA.y + (rB.y - rA.y) * t;
+        S.strokePath(ctx, pens.hair, [{ x: x, y: y }, { x: x, y: y - 2.4 }], { lod: p.lod, alpha: 0.8 });
+      }
+    }
+    const c2 = proj(R, hp.corners);
+    S.strokePoly(ctx, pens.detail, c2, { lod: p.lod, width: 0.85 });
+  }
+
+  // --- stepped / ornamented parapet ----------------------------------------
+  // Flat roof crowned by two or three inset blocks — the setback silhouette,
+  // with shallow fluting on the faces that read.
+  function roofStepped(ctx, R, pens, rng, p) {
+    const b = box(R), h = R.roof.h;
+    const steps = Math.max(2, Math.min(4, R.roof.steps || 3));
+    const shrink = Math.min(b.w, b.d) * 0.11;
+    const topVisible = G.facing(G.v3(0, 1, 0), R.cam) > 0.02;
+
+    for (let k = 0; k < steps; k++) {
+      const in0 = shrink * k;
+      const y0 = b.y + (h * k) / steps;
+      const y1 = b.y + (h * (k + 1)) / steps;
+      const x0 = b.x0 + in0, x1 = b.x1 - in0, z0 = b.z0 + in0, z1 = b.z1 - in0;
+      if (x1 - x0 < 0.4 || z1 - z0 < 0.4) break;
+      const top = [
+        G.v3(x0, y1, z1), G.v3(x1, y1, z1), G.v3(x1, y1, z0), G.v3(x0, y1, z0)
+      ];
+      const t2 = proj(R, top);
+      const bot = proj(R, top.map(function (v) { return G.v3(v.x, y0, v.z); }));
+      if (k === 0) accentPoly(ctx, t2, R.roof.accent, rng);
+      // the block's vertical faces
+      for (let i = 0; i < 4; i++) {
+        S.strokePath(ctx, pens.detail, [bot[i], t2[i]], { lod: p.lod, width: 0.8 });
+      }
+      S.strokePoly(ctx, pens.detail, bot, { lod: p.lod, width: 0.8 });
+      if (topVisible || k === steps - 1) S.strokePoly(ctx, pens.outline, t2, { lod: p.lod, width: 0.9 });
+      // fluting, only on the faces actually turned toward the viewer
+      if (p.lod >= 0.65) {
+        for (let i = 0; i < 4; i++) {
+          const A = top[i], B = top[(i + 1) % 4];
+          const outward = G.v3(-(B.z - A.z), 0, B.x - A.x);
+          if (G.facing(outward, R.cam) <= 0.05) continue;
+          const face = [bot[i], bot[(i + 1) % 4], t2[(i + 1) % 4], t2[i]];
+          if (!S.quadOk(face)) continue;
+          const n = rng.int(3, 6);
+          for (let f = 1; f < n; f++) {
+            S.strokePath(ctx, pens.hair,
+              [S.quadPt(face, f / n, 0.12), S.quadPt(face, f / n, 0.88)],
+              { lod: p.lod, alpha: 0.7 });
+          }
+        }
+      }
+    }
+  }
+
+  // --- steep timber gable ---------------------------------------------------
+  // A tall pitch with projecting bargeboards, a ridge board and vertical
+  // boarding on the gable ends.
+  function roofSteepGable(ctx, R, pens, rng, p) {
+    const b = box(R), h = R.roof.h;
+    const alongZ = R.roof.ridgeAxis === 'z';
+    const xm = (b.x0 + b.x1) / 2, zm = (b.z0 + b.z1) / 2;
+    let ra, rb, e0, e1;
+    if (alongZ) {
+      ra = G.v3(xm, b.y + h, b.z0); rb = G.v3(xm, b.y + h, b.z1);
+      e0 = [G.v3(b.x0, b.y, b.z0), G.v3(b.x0, b.y, b.z1)];
+      e1 = [G.v3(b.x1, b.y, b.z0), G.v3(b.x1, b.y, b.z1)];
+    } else {
+      ra = G.v3(b.x0, b.y + h, zm); rb = G.v3(b.x1, b.y + h, zm);
+      e0 = [G.v3(b.x0, b.y, b.z0), G.v3(b.x1, b.y, b.z0)];
+      e1 = [G.v3(b.x0, b.y, b.z1), G.v3(b.x1, b.y, b.z1)];
+    }
+    const P = function (v) { return R.P(v.x, v.y, v.z); };
+    [[e0[0], e0[1], rb, ra], [e1[1], e1[0], ra, rb]].forEach(function (sl) {
+      if (!visiblePlane(R, sl[0], sl[1], sl[2])) return;
+      const q = proj(R, sl);
+      accentPoly(ctx, q, R.roof.accent, rng);
+      if (p.lod >= 0.5) {
+        // boards running up the slope
+        S.hatchQuad(ctx, pens.hatch, q, {
+          angle: 1.52, gap: R.roof.seamGap * 1.2, lod: p.lod, alpha: 0.5,
+          max: p.lod >= 0.8 ? 12 : 6
+        });
+      }
+      S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: 0.9, overshoot: 0.14 });
+    });
+    // ridge board: two close lines
+    S.strokePath(ctx, pens.outline, [P(ra), P(rb)], { lod: p.lod });
+    S.strokePath(ctx, pens.hair, [{ x: P(ra).x, y: P(ra).y - 2.6 }, { x: P(rb).x, y: P(rb).y - 2.6 }],
+      { lod: p.lod, alpha: 0.75 });
+
+    [[ra, e0[0], e1[0]], [rb, e0[1], e1[1]]].forEach(function (tri) {
+      const q = proj(R, tri);
+      // bargeboards: the gable edge doubled slightly outside itself
+      [[q[1], q[0]], [q[2], q[0]]].forEach(function (edge) {
+        S.strokePath(ctx, pens.outline, edge, { lod: p.lod, width: 0.95 });
+        if (p.lod >= 0.6) {
+          const dx = (edge[0].x - edge[1].x), dy = (edge[0].y - edge[1].y);
+          const l = Math.hypot(dx, dy) || 1;
+          const ox = (-dy / l) * 2.6, oy = (dx / l) * 2.6;
+          S.strokePath(ctx, pens.hair,
+            [{ x: edge[0].x + ox, y: edge[0].y + oy }, { x: edge[1].x + ox, y: edge[1].y + oy }],
+            { lod: p.lod, alpha: 0.7 });
+        }
+      });
+      S.strokePath(ctx, pens.detail, [q[1], q[2]], { lod: p.lod, width: 0.8 });
+      if (p.lod >= 0.7 && rng.chance(0.7)) {
+        // small vent slot in the gable
+        const c = { x: (q[1].x + q[2].x) / 2, y: (q[0].y + (q[1].y + q[2].y) / 2) / 2 };
+        S.strokeEllipse(ctx, pens.hair, c.x, c.y, 3.4, 2.6, { lod: p.lod });
+      }
+    });
+  }
+
+  // --- crenellated parapet --------------------------------------------------
+  // Flat deck behind a notched parapet, with a string course under the notches.
+  function roofCrenellated(ctx, R, pens, rng, p) {
+    const b = box(R), h = R.roof.h;
+    const merlons = Math.max(2, Math.min(9, R.roof.merlons || 5));
+    const deck = [
+      G.v3(b.x0, b.y, b.z1), G.v3(b.x1, b.y, b.z1),
+      G.v3(b.x1, b.y, b.z0), G.v3(b.x0, b.y, b.z0)
+    ];
+    const d2 = proj(R, deck);
+    if (G.facing(G.v3(0, 1, 0), R.cam) > 0.02) {
+      accentPoly(ctx, d2, R.roof.accent, rng);
+      if (p.lod >= 0.55) {
+        S.hatchQuad(ctx, pens.hatch, d2, {
+          angle: 0.5, gap: 0.26, lod: p.lod, alpha: 0.3, max: 5
+        });
+      }
+    }
+    S.strokePoly(ctx, pens.detail, d2, { lod: p.lod, width: 0.85 });
+
+    const low = b.y + h * 0.42;
+    const top = b.y + h;
+    for (let e = 0; e < 4; e++) {
+      const A = deck[e], B = deck[(e + 1) % 4];
+      const n = Math.max(2, Math.round(merlons *
+        (Math.hypot(B.x - A.x, B.z - A.z) / Math.max(b.w, b.d))));
+      const at = function (t, y) {
+        return G.v3(A.x + (B.x - A.x) * t, y, A.z + (B.z - A.z) * t);
+      };
+      const path = [at(0, low)];
+      for (let i = 0; i < n; i++) {
+        const t0 = i / n, t1 = (i + 0.62) / n;
+        path.push(at(t0, low), at(t0, top), at(t1, top), at(t1, low));
+      }
+      path.push(at(1, low));
+      S.strokePath(ctx, pens.detail, proj(R, path), { lod: p.lod, width: 0.85, filament: 0 });
+      // string course carrying the parapet
+      S.strokePath(ctx, pens.hair, proj(R, [at(0, low - h * 0.16), at(1, low - h * 0.16)]),
+        { lod: p.lod, alpha: 0.75 });
+    }
+  }
+
   NS.roofs = {
     flat: roofFlat,
     gabled: roofGabled,
     hipped: roofHipped,
     shed: roofShed,
-    barrel: roofBarrel
+    barrel: roofBarrel,
+    broadEave: roofBroadEave,
+    pantile: roofPantile,
+    steppedParapet: roofStepped,
+    steepGable: roofSteepGable,
+    crenellated: roofCrenellated
   };
-  NS.roofNames = ['flat', 'gabled', 'hipped', 'shed', 'barrel'];
+  NS.roofNames = ['flat', 'gabled', 'hipped', 'shed', 'barrel',
+    'broadEave', 'pantile', 'steppedParapet', 'steepGable', 'crenellated'];
 
   /** roofHeight — how far the roof rises above its prism, used for fit-to-rect. */
   NS.roofHeight = function (variant, pr, rng) {
@@ -264,6 +551,11 @@
       case 'hipped': return small * rng.range(0.26, 0.42);
       case 'shed': return small * rng.range(0.22, 0.4);
       case 'barrel': return small * rng.range(0.3, 0.46);
+      case 'broadEave': return small * rng.range(0.22, 0.34);
+      case 'pantile': return small * rng.range(0.28, 0.44);
+      case 'steppedParapet': return rng.range(1.1, 2.4);
+      case 'steepGable': return small * rng.range(0.55, 0.85);
+      case 'crenellated': return rng.range(0.8, 1.5);
       default: return 0.5;
     }
   };

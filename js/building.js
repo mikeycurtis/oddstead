@@ -22,13 +22,24 @@
     const names = ST.pickAccents(rng, mood);
     const has = function (n) { return names.indexOf(n) >= 0; };
     const A = ST.accents;
-    const map = { names: names, roof: null, veg: null, glass: null, door: null, sign: null };
+    const map = {
+      names: names, roof: null, veg: null, glass: null,
+      door: null, sign: null, trim: null
+    };
     if (has('terracotta')) map.roof = A.terracotta;
     if (has('sage')) map.veg = A.sage;
     if (has('slate')) map.glass = A.slate;
     if (has('mustard')) { map.door = A.mustard; map.sign = A.mustard; }
+    // olive reads as planting; ochre as render, tile and screenwork
+    if (has('olive')) { map.veg = A.olive; map.trim = A.olive; }
+    if (has('ochre')) {
+      map.trim = A.ochre;
+      if (!map.roof) map.roof = A.ochre;
+      if (!map.sign) map.sign = A.ochre;
+    }
     if (!map.door && has('terracotta') && rng.chance(0.4)) map.door = A.terracotta;
     if (!map.sign && map.roof && rng.chance(0.4)) map.sign = map.roof;
+    if (!map.trim && map.roof && rng.chance(0.5)) map.trim = map.roof;
     return map;
   }
 
@@ -45,11 +56,18 @@
     const bayW = rng.range(2.6, 3.6);
     const bays = clamp(Math.round(faceW / bayW), 1, 9);
 
+    const det = opts.detail;
+
     let system = rng.weightedKey(cfgMood.facades);
     if (opts.shadow && rng.chance(0.45)) system = 'solid';
     if (opts.blank) system = 'solid';
     if (!AD.facade.systems[system]) system = 'grid';
-    if (floors < 2 && (system === 'arcade' || system === 'ribbonGrid')) system = 'grid';
+    // systems that need a storey above their special ground floor
+    if (floors < 2 && (system === 'arcade' || system === 'ribbonGrid' ||
+      system === 'decoBanded')) system = 'grid';
+    if (floors < 2 && (system === 'veranda' || system === 'colonnade') && faceW < 6) {
+      system = 'grid';
+    }
 
     const win = rng.weightedKey(cfgMood.windows);
     const cfg = {
@@ -67,12 +85,27 @@
       floorLines: rng.chance(0.35),
       skip: rng.chance(0.25) ? rng.range(0.04, 0.14) : 0,
       balconyP: rng.range(0.3, 0.62),
-      railing: rng.pick(AD.details.railingNames),
+      // a family that screens its façades tends to screen its balustrades too
+      railing: rng.weightedKey({
+        bars: 3,
+        cross: 1.5,
+        slab: 1.5,
+        lattice: 1 + (cfgMood.facades.screened || 0),
+        turned: 1 + (cfgMood.facades.veranda || 0) * 0.7 + (cfgMood.facades.colonnade || 0) * 0.5
+      }),
       hatchAngle: rng.chance(0.5) ? -1.05 : -0.6,
       hatchGap: rng.range(0.055, 0.11),
       sparse: rng.range(0.03, 0.14),
       arcadeDense: rng.chance(0.4),
       mullions: rng.chance(0.6),
+      // screens, posts and braces — read by the screened / veranda /
+      // colonnade / timberFrame systems, ignored by the others
+      screenP: clamp(rng.range(0.3, 0.75), 0, 1),
+      screenDiagonal: rng.chance(0.4),
+      posts: clamp(Math.round(faceW / rng.range(2.2, 3.4)), 2, 8),
+      braceP: rng.range(0.2, 0.5),
+      potP: clamp(det.planters * 0.5, 0, 0.6),
+      windowBoxP: clamp(det.windowBox * 0.55, 0, 0.6),
       shadow: !!opts.shadow,
       hasDoor: !!opts.door,
       door: rng.weightedKey(cfgMood.doors),
@@ -84,19 +117,51 @@
     if (!AD.openings.doors[cfg.door]) cfg.door = 'plain';
     if (cfg.altWin && !AD.openings.windows[cfg.altWin]) cfg.altWin = null;
 
-    // ornament layer
+    // --- ornament layers ---------------------------------------------------
+    // Which extra layers a wall wears is a mood decision; how many is a density
+    // decision. Layers that only make sense once (a cornice, a bracket course)
+    // are never rolled twice on the same wall.
     const budget = opts.detailBudget;
-    if (rng.chance(clamp(0.45 * budget, 0, 0.85))) cfg.ornaments.push({ type: 'cornice' });
-    if (rng.chance(clamp(0.3 * budget, 0, 0.6))) cfg.ornaments.push({ type: 'pilasters' });
-    if (opts.door && rng.chance(clamp(0.45 * budget, 0, 0.7))) {
-      cfg.ornaments.push({ type: 'signage', u0: rng.range(0.08, 0.45), v0: rng.range(0.16, 0.3) });
+    const table = cfgMood.ornaments || { cornice: 3, pilasters: 2, signage: 1.5, ac: 1.5 };
+    const once = { cornice: 1, pilasters: 1, brackets: 1, sunshade: 1, chevrons: 1, latticeBand: 1 };
+    const taken = {};
+    const layers = clamp(Math.floor(rng.range(0.2, 1.6 + 2.4 * budget)), 0, 5);
+    for (let i = 0; i < layers; i++) {
+      let type = rng.weightedKey(table);
+      if (!AD.details.ornament[type]) type = 'cornice';
+      if (type === 'signage' && !opts.door) type = 'cornice';
+      if (once[type] && taken[type]) continue;
+      taken[type] = true;
+      if (type === 'signage') {
+        cfg.ornaments.push({
+          type: type, u0: rng.range(0.08, 0.45), v0: rng.range(0.16, 0.3)
+        });
+      } else if (type === 'ac') {
+        cfg.ornaments.push({ type: type, u: rng.range(0.1, 0.85), v: rng.range(0.22, 0.85) });
+      } else if (type === 'chevrons') {
+        cfg.ornaments.push({ type: type, v: rng.range(0.86, 0.93), h: rng.range(0.025, 0.055) });
+      } else if (type === 'brackets') {
+        cfg.ornaments.push({ type: type, v: rng.range(0.93, 0.97), drop: rng.range(0.03, 0.07) });
+      } else if (type === 'sunshade') {
+        // sit the shade on a floor line so it reads as built, not floating
+        const fl = floors > 1 ? rng.int(1, floors - 1) / floors : 0.62;
+        cfg.ornaments.push({ type: type, v: clamp(fl - 0.03, 0.2, 0.86) });
+      } else if (type === 'latticeBand') {
+        const u0 = rng.range(0.06, 0.4);
+        cfg.ornaments.push({
+          type: type, u0: u0, u1: Math.min(0.96, u0 + rng.range(0.3, 0.55)),
+          v: rng.range(0.28, 0.66), h: rng.range(0.1, 0.2)
+        });
+      } else {
+        cfg.ornaments.push({ type: type });
+      }
     }
-    const acN = Math.floor(rng.range(0, 2.6 * budget));
-    for (let i = 0; i < acN; i++) {
-      cfg.ornaments.push({ type: 'ac', u: rng.range(0.1, 0.85), v: rng.range(0.22, 0.85) });
-    }
-    if (rng.chance(clamp(0.22 * budget, 0, 0.45))) {
+
+    // --- greenery on the wall ----------------------------------------------
+    if (rng.chance(clamp(det.vines * budget, 0, 0.5))) {
       cfg.ornaments.push({ type: 'vine', u: rng.range(0.06, 0.9) });
+    } else if (rng.chance(clamp(det.vines * 0.55 * budget, 0, 0.35))) {
+      cfg.ornaments.push({ type: 'trellis', u: rng.range(0.06, 0.7) });
     }
     return cfg;
   }
@@ -114,6 +179,7 @@
     let mood = opts.mood && opts.mood !== 'any' ? opts.mood : moodRng.pick(ST.moodNames);
     if (!ST.moods[mood]) mood = 'town';
     const cfgMood = ST.moods[mood];
+    const det = ST.detailOf(mood);
 
     const styleRng = master.fork('style');
     const accents = pickAccentMap(styleRng, mood);
@@ -147,13 +213,26 @@
       let variant = roofRng.chance(0.3) ? roofRng.weightedKey(cfgMood.roofs) : mainRoof;
       if (!AD.roofs.roofs[variant]) variant = 'flat';
       const long = pr.d > pr.w;
+      const flatTop = variant === 'flat' || variant === 'steppedParapet' ||
+        variant === 'crenellated';
+      // how far the roof reaches past its wall: the family's eave habit, plus
+      // a real overhang for the broad-eave variant
+      let ov = 0;
+      if (!flatTop) {
+        ov = roofRng.range(0.12, 0.4) + det.eave * roofRng.range(0.1, 0.5);
+        if (variant === 'broadEave') ov += roofRng.range(0.45, 0.9);
+      }
       return {
         variant: variant,
         h: AD.roofs.roofHeight(variant, pr, roofRng),
-        ov: variant === 'flat' ? 0 : roofRng.range(0.12, 0.5),
+        ov: ov,
         ridgeAxis: long ? 'z' : 'x',
         highSide: roofRng.pick(['xmax', 'xmin', 'zmax', 'zmin']),
         seamGap: roofRng.range(0.1, 0.2),
+        upturn: roofRng.range(0.1, 0.16) + det.eave * roofRng.range(0.05, 0.22),
+        steps: roofRng.int(2, 4),
+        merlons: roofRng.int(3, 7),
+        tileGap: roofRng.range(0.07, 0.14),
         accent: roofRng.chance(0.75) ? accents.roof : null
       };
     });
@@ -173,6 +252,7 @@
           shadow: G.dot(nrm, light) < -0.05,
           blank: pr.w * pr.d < 12 && rng.chance(0.3),
           door: isDoor,
+          detail: det,
           detailBudget: density
         });
       });
@@ -187,15 +267,19 @@
       const area = pr.w * pr.d;
       const n = clamp(Math.floor(gearRng.range(0, 1 + area * 0.045 * density)), 0, 4);
       for (let k = 0; k < n; k++) {
-        const type = gearRng.weightedKey(cfgMood.gear);
+        let type = gearRng.weightedKey(cfgMood.gear);
+        if (!AD.details.gear[type]) type = 'chimney';
         const pitched = roof.variant && roof.variant !== 'flat';
-        // pitched roofs push gear toward the ridge so it doesn't float
-        const inset = pitched ? 0.34 : 0.16;
+        // crowning pieces belong on the ridge or the centre of the deck;
+        // working gear can wander, but pitched roofs pull it toward the ridge
+        const crown = type === 'finial' || type === 'cupola' || type === 'spire';
+        const inset = crown ? 0.44 : (pitched ? 0.34 : 0.16);
         const x = pr.x + pr.w * gearRng.range(inset, 1 - inset);
         const z = pr.z + pr.d * gearRng.range(inset, 1 - inset);
-        const y = pr.y0 + pr.h + (roof.variant === 'flat' ? roof.h * 0.85 : roof.h * gearRng.range(0.3, 0.6));
+        const y = pr.y0 + pr.h + (crown ? roof.h * (pitched ? 0.98 : 1)
+          : roof.variant === 'flat' ? roof.h * 0.85 : roof.h * gearRng.range(0.3, 0.6));
         gear.push({
-          prism: i, type: AD.details.gear[type] ? type : 'chimney',
+          prism: i, type: type,
           x: x, z: z, y: y,
           size: Math.min(pr.w, pr.d) * gearRng.range(0.08, 0.16) + 0.25
         });
@@ -223,19 +307,65 @@
         height: siteRng.range(0.9, 1.7),
         rails: siteRng.int(1, 2)
       } : null,
-      trees: []
+      trees: [],
+      planters: [],
+      planting: []
     };
-    const treeN = clamp(Math.round(siteRng.range(0, 2.4 * density) + (siteRng.chance(0.5) ? 1 : 0)), 0, 5);
+    const treeN = clamp(Math.round(
+      siteRng.range(0, 2.4 * density * det.treeCount) + (siteRng.chance(0.55) ? 1 : 0)
+    ), 0, 6);
     for (let i = 0; i < treeN; i++) {
-      const type = siteRng.weightedKey(cfgMood.trees);
+      let type = siteRng.weightedKey(cfgMood.trees);
+      if (!AD.site.trees[type]) type = 'round';
       const side = siteRng.chance(0.5) ? 1 : -1;
+      const z = siteRng.range(-fd / 2 - 1.5, fd / 2 + 3);
+      let h = AD.site.treeHeight(type, siteRng);
+      // planting always stands clear of the footprint, and anything in front of
+      // the building stays low so it dresses the sheet instead of hiding it
+      const inFront = z > fd / 2 - 0.5;
+      if (inFront && h > 4.5) h = siteRng.range(2.4, 4.2);
       site.trees.push({
-        type: AD.site.trees[type] ? type : 'round',
-        x: side * (fw / 2 + siteRng.range(0.6, 4.5)),
-        z: siteRng.range(-fd / 2 - 1, fd / 2 + 3),
-        h: type === 'cypress' ? siteRng.range(4, 9)
-          : type === 'bush' ? siteRng.range(0.9, 1.8) : siteRng.range(3, 7)
+        type: type,
+        x: side * (fw / 2 + siteRng.range(h > 5 ? 1.6 : 0.8, 5)),
+        z: z,
+        h: h
       });
+    }
+
+    // planters standing against the entrance volume
+    const frontPr = mass.prisms[frontIdx];
+    if (siteRng.chance(clamp(det.planters * density, 0, 0.9))) {
+      const n = siteRng.int(1, 3);
+      for (let i = 0; i < n; i++) {
+        const w = siteRng.range(0.9, 2);
+        site.planters.push({
+          x: frontPr.x + frontPr.w * siteRng.range(0.12, 0.88),
+          z: frontPr.z + frontPr.d + siteRng.range(0.3, 0.8),
+          w: w,
+          d: siteRng.range(0.5, 0.9),
+          h: siteRng.range(0.35, 0.7),
+          tall: siteRng.chance(0.4)
+        });
+      }
+    }
+
+    // low ground planting where wall meets ground
+    if (siteRng.chance(clamp(det.groundPlant * density, 0, 0.95))) {
+      const n = siteRng.int(1, 3);
+      for (let i = 0; i < n; i++) {
+        const alongFront = siteRng.chance(0.6);
+        site.planting.push({
+          x: alongFront
+            ? frontPr.x + frontPr.w * siteRng.range(0.05, 0.95)
+            : (siteRng.chance(0.5) ? 1 : -1) * (fw / 2 + siteRng.range(0.3, 2.4)),
+          z: alongFront
+            ? frontPr.z + frontPr.d + siteRng.range(0.15, 0.6)
+            : siteRng.range(-fd / 2, fd / 2 + 2),
+          spread: siteRng.range(0.6, 1.8),
+          n: siteRng.int(2, 5),
+          scale: siteRng.range(0.7, 1.3)
+        });
+      }
     }
 
     return {
@@ -264,10 +394,19 @@
       const roof = plan.roofs[i];
       if (roof && roof.variant) {
         const top = pr.y0 + pr.h + roof.h;
-        pts.push(G.v3(pr.x, top, pr.z));
-        pts.push(G.v3(pr.x + pr.w, top, pr.z + pr.d));
-        pts.push(G.v3(pr.x + pr.w, top, pr.z));
-        pts.push(G.v3(pr.x, top, pr.z + pr.d));
+        // the overhang counts: a deep eave has to stay inside the sheet too
+        const ov = roof.ov || 0;
+        const x0 = pr.x - ov, x1 = pr.x + pr.w + ov;
+        const z0 = pr.z - ov, z1 = pr.z + pr.d + ov;
+        pts.push(G.v3(x0, top, z0));
+        pts.push(G.v3(x1, top, z1));
+        pts.push(G.v3(x1, top, z0));
+        pts.push(G.v3(x0, top, z1));
+        if (ov > 0) {
+          const eave = pr.y0 + pr.h;
+          pts.push(G.v3(x0, eave, z0));
+          pts.push(G.v3(x1, eave, z1));
+        }
       }
     });
     plan.gear.forEach(function (g) {
@@ -276,6 +415,10 @@
     plan.site.trees.forEach(function (t) {
       pts.push(G.v3(t.x, t.h * 1.35, t.z));
       pts.push(G.v3(t.x, 0, t.z));
+    });
+    (plan.site.planters || []).forEach(function (b) {
+      pts.push(G.v3(b.x, b.h * 2.2, b.z));
+      pts.push(G.v3(b.x, 0, b.z + b.d / 2));
     });
     return pts;
   }
@@ -309,7 +452,8 @@
       glassAccent: palette.glass,
       doorAccent: palette.door,
       vegAccent: palette.veg,
-      signAccent: palette.sign
+      signAccent: palette.sign,
+      trimAccent: palette.trim
     };
 
     // shaded side: hatch the whole wall first, then cut the openings into it
@@ -334,14 +478,23 @@
     const sys = AD.facade.systems[cfg.system] || AD.facade.systems.grid;
     sys(ctx, frame, pens, rng, p, cfg);
 
-    // ornament layer
+    // ornament layers — each has the LOD below which it stops being legible
+    const ORN_LOD = {
+      cornice: 0.45, pilasters: 0.6, signage: 0.55, ac: 0.7,
+      chevrons: 0.55, brackets: 0.5, sunshade: 0.5, latticeBand: 0.55
+    };
     for (let k = 0; k < cfg.ornaments.length; k++) {
       const o = cfg.ornaments[k];
-      if (o.type === 'cornice' && lod >= 0.45) AD.details.ornament.cornice(ctx, frame, pens, rng, p, o);
-      else if (o.type === 'pilasters' && lod >= 0.6) AD.details.ornament.pilasters(ctx, frame, pens, rng, p);
-      else if (o.type === 'signage' && lod >= 0.55) AD.details.ornament.signage(ctx, frame, pens, rng, p, o);
-      else if (o.type === 'ac' && lod >= 0.7) AD.details.ornament.ac(ctx, frame, pens, rng, p, o);
-      else if (o.type === 'vine' && lod >= 0.6) AD.details.vegetation.vine(ctx, frame, pens, rng, p, o);
+      const orn = AD.details.ornament[o.type];
+      if (orn) {
+        if (lod >= (ORN_LOD[o.type] == null ? 0.6 : ORN_LOD[o.type])) {
+          orn(ctx, frame, pens, rng, p, o);
+        }
+      } else if (o.type === 'vine' && lod >= 0.6) {
+        AD.details.vegetation.vine(ctx, frame, pens, rng, p, o);
+      } else if (o.type === 'trellis' && lod >= 0.6) {
+        AD.details.vegetation.trellis(ctx, frame, pens, rng, p, o);
+      }
     }
   }
 
@@ -362,7 +515,7 @@
     const palette = plan.accents;
     const p = {
       lod: lod, glassAccent: palette.glass, doorAccent: palette.door,
-      vegAccent: palette.veg, signAccent: palette.sign
+      vegAccent: palette.veg, signAccent: palette.sign, trimAccent: palette.trim
     };
     const siteRng = AD.rng.makeRng(plan.seed + ':drawsite');
 
@@ -377,14 +530,23 @@
       prism: plan.mass.prisms[plan.frontIdx], length: plan.site.shadowLen
     });
 
-    // trees behind the building
+    // planting sorted against the building's own depth, so what stands behind
+    // the volumes is drawn before them and what stands in front is drawn after
+    const depthOf = function (x, z) { return G.rot({ x: x, y: 0, z: z }, cam).z; };
+    const frontDepth = depthOf(0, plan.mass.footprint.d / 2);
     const trees = plan.site.trees.map(function (t) {
-      return { t: t, depth: G.rot({ x: t.x, y: 0, z: t.z }, cam).z };
+      return { t: t, depth: depthOf(t.x, t.z) };
     });
-    const frontDepth = G.rot({ x: 0, y: 0, z: plan.mass.footprint.d / 2 }, cam).z;
+    const patches = (plan.site.planting || []).map(function (g) {
+      return { g: g, depth: depthOf(g.x, g.z) };
+    });
     trees.forEach(function (e) {
       if (e.depth >= frontDepth) return;
       AD.site.trees[e.t.type](ctx, R, pens, siteRng, p, e.t);
+    });
+    patches.forEach(function (e) {
+      if (e.depth >= frontDepth) return;
+      AD.site.groundPlanting(ctx, R, pens, siteRng, p, e.g);
     });
 
     if (plan.site.plinth) {
@@ -450,6 +612,14 @@
     });
 
     // --- foreground ---------------------------------------------------------
+    // planters sit against the wall, so they always belong over the volumes
+    (plan.site.planters || []).forEach(function (b) {
+      AD.site.planter(ctx, R, pens, siteRng, p, b);
+    });
+    patches.forEach(function (e) {
+      if (e.depth < frontDepth) return;
+      AD.site.groundPlanting(ctx, R, pens, siteRng, p, e.g);
+    });
     trees.forEach(function (e) {
       if (e.depth < frontDepth) return;
       AD.site.trees[e.t.type](ctx, R, pens, siteRng, p, e.t);

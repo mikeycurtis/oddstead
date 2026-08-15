@@ -86,8 +86,47 @@
     }
   }
 
-  NS.railings = { bars: railBars, cross: railCross, slab: railSlab };
-  NS.railingNames = ['bars', 'cross', 'slab'];
+  /** Fine lattice infill — the screened balustrade. */
+  function railLattice(ctx, q, pens, rng, p) {
+    if (!S.quadOk(q)) return;
+    S.strokePath(ctx, pens.detail, [Q(q, 0, 1), Q(q, 1, 1)], { lod: p.lod, width: 0.9 });
+    S.strokePath(ctx, pens.detail, [Q(q, 0, 0), Q(q, 1, 0)], { lod: p.lod, width: 0.9 });
+    S.strokePath(ctx, pens.detail, [Q(q, 0, 0), Q(q, 0, 1)], { lod: p.lod, width: 0.8 });
+    S.strokePath(ctx, pens.detail, [Q(q, 1, 0), Q(q, 1, 1)], { lod: p.lod, width: 0.8 });
+    if (p.lod < 0.55) return;
+    const w = S.quadSize(q).w;
+    const n = Math.max(2, Math.min(10, Math.round(w / 7)));
+    for (let i = 0; i < n; i++) {
+      const a = i / n, b = (i + 1) / n;
+      S.strokePath(ctx, pens.hair, [Q(q, a, 0.04), Q(q, b, 0.96)], { lod: p.lod, alpha: 0.8 });
+      S.strokePath(ctx, pens.hair, [Q(q, a, 0.96), Q(q, b, 0.04)], { lod: p.lod, alpha: 0.8 });
+    }
+    S.strokePath(ctx, pens.hair, [Q(q, 0.02, 0.5), Q(q, 0.98, 0.5)], { lod: p.lod, alpha: 0.7 });
+  }
+
+  /** Turned balusters: short posts with a swelling at mid height. */
+  function railTurned(ctx, q, pens, rng, p) {
+    if (!S.quadOk(q)) return;
+    S.strokePath(ctx, pens.detail, [Q(q, -0.03, 1), Q(q, 1.03, 1)], { lod: p.lod, width: 1 });
+    S.strokePath(ctx, pens.detail, [Q(q, -0.02, 0.06), Q(q, 1.02, 0.06)], { lod: p.lod, width: 0.9 });
+    if (p.lod < 0.6) return;
+    const w = S.quadSize(q).w;
+    const n = Math.max(2, Math.min(11, Math.round(w / 7)));
+    for (let i = 0; i <= n; i++) {
+      const u = i / n;
+      S.strokePath(ctx, pens.hair, [Q(q, u, 0.08), Q(q, u, 0.94)], { lod: p.lod, alpha: 0.9 });
+      if (p.lod >= 0.75) {
+        const c = Q(q, u, 0.5);
+        S.strokeEllipse(ctx, pens.hair, c.x, c.y, 1.5, 2.2, { lod: p.lod });
+      }
+    }
+  }
+
+  NS.railings = {
+    bars: railBars, cross: railCross, slab: railSlab,
+    lattice: railLattice, turned: railTurned
+  };
+  NS.railingNames = ['bars', 'cross', 'slab', 'lattice', 'turned'];
 
   // --- roof gear ------------------------------------------------------------
   function gearChimney(ctx, R, pens, rng, p, g) {
@@ -178,10 +217,96 @@
     }
   }
 
+  /** Ridge ornament: a short post carrying a disc and two small flares. */
+  function gearFinial(ctx, R, pens, rng, p, g) {
+    const h = g.size * rng.range(1.6, 2.8);
+    const a = R.P(g.x, g.y, g.z);
+    const b = R.P(g.x, g.y + h, g.z);
+    const w = Math.max(1.2, g.size * R.pxPerUnit * 0.16);
+    // tapered shaft
+    S.strokePath(ctx, pens.detail, [{ x: a.x - w, y: a.y }, { x: b.x - w * 0.45, y: b.y }],
+      { lod: p.lod, width: 0.85 });
+    S.strokePath(ctx, pens.detail, [{ x: a.x + w, y: a.y }, { x: b.x + w * 0.45, y: b.y }],
+      { lod: p.lod, width: 0.85 });
+    const mid = R.P(g.x, g.y + h * 0.55, g.z);
+    S.strokeEllipse(ctx, pens.detail, mid.x, mid.y, w * 1.9, w * 0.9, { lod: p.lod });
+    S.strokeEllipse(ctx, pens.detail, b.x, b.y - w * 0.8, w * 1.1, w * 1.2, { lod: p.lod });
+    if (p.lod >= 0.6) {
+      // flares sweeping out at the base of the shaft
+      const base = R.P(g.x, g.y + h * 0.16, g.z);
+      S.strokePath(ctx, pens.hair, [
+        { x: base.x - w * 3, y: base.y - w * 0.6 }, { x: base.x - w, y: base.y }
+      ], { lod: p.lod, alpha: 0.85 });
+      S.strokePath(ctx, pens.hair, [
+        { x: base.x + w * 3, y: base.y - w * 0.6 }, { x: base.x + w, y: base.y }
+      ], { lod: p.lod, alpha: 0.85 });
+    }
+  }
+
+  /** Small domed lantern on a drum. */
+  function gearCupola(ctx, R, pens, rng, p, g) {
+    const drumH = g.size * rng.range(0.9, 1.6);
+    const r = g.size * rng.range(0.7, 1.1);
+    const rx = Math.max(2, r * R.pxPerUnit);
+    const ry = rx * Math.max(0.12, Math.abs(R.cam.sp_)) * 0.9 + 1.2;
+    const bot = R.P(g.x, g.y, g.z);
+    const top = R.P(g.x, g.y + drumH, g.z);
+    S.strokePath(ctx, pens.detail, [{ x: bot.x - rx, y: bot.y }, { x: top.x - rx, y: top.y }],
+      { lod: p.lod, width: 0.85 });
+    S.strokePath(ctx, pens.detail, [{ x: bot.x + rx, y: bot.y }, { x: top.x + rx, y: top.y }],
+      { lod: p.lod, width: 0.85 });
+    S.strokeEllipse(ctx, pens.detail, top.x, top.y, rx, ry, { lod: p.lod });
+    // the dome: a flattened half-ellipse springing off the drum
+    const domeH = rx * rng.range(1.0, 1.5);
+    S.strokePath(ctx, pens.detail,
+      G.arcPts(top.x, top.y, rx, domeH, Math.PI, Math.PI * 2, p.lod >= 0.7 ? 14 : 7),
+      { lod: p.lod, width: 0.95 });
+    if (p.lod >= 0.6) {
+      // meridian and a small finial pip
+      S.strokePath(ctx, pens.hair, [
+        { x: top.x, y: top.y - domeH }, { x: top.x, y: top.y - domeH - rx * 0.7 }
+      ], { lod: p.lod });
+      S.strokeEllipse(ctx, pens.hair, top.x, top.y - domeH - rx * 0.85, 1.5, 1.5, { lod: p.lod });
+      S.strokePath(ctx, pens.hair,
+        G.arcPts(top.x, top.y, rx * 0.45, domeH * 0.92, Math.PI, Math.PI * 2, 9),
+        { lod: p.lod, alpha: 0.6 });
+      const n = rng.int(2, 4);
+      for (let i = 1; i < n; i++) {
+        const x = bot.x - rx + (2 * rx * i) / n;
+        S.strokePath(ctx, pens.hair, [{ x: x, y: bot.y }, { x: x, y: top.y }],
+          { lod: p.lod, alpha: 0.55 });
+      }
+    }
+  }
+
+  /** Setback mast: two or three shrinking blocks under a thin spike. */
+  function gearSpire(ctx, R, pens, rng, p, g) {
+    const tiers = rng.int(2, 3);
+    let y = g.y, s = g.size * rng.range(1.1, 1.7);
+    for (let i = 0; i < tiers; i++) {
+      const h = s * rng.range(0.8, 1.4);
+      box3(ctx, R, pens, rng, p, {
+        x: g.x - s / 2, z: g.z - s / 2, w: s, d: s, y: y, h: h
+      }, { width: 0.8 });
+      y += h;
+      s *= rng.range(0.5, 0.72);
+    }
+    const a = R.P(g.x, y, g.z);
+    const b = R.P(g.x, y + g.size * rng.range(2.5, 5), g.z);
+    S.strokePath(ctx, pens.detail, [a, b], { lod: p.lod, width: 0.8 });
+    if (p.lod >= 0.6) {
+      const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      S.strokePath(ctx, pens.hair, [{ x: c.x - 3, y: c.y + 1 }, { x: c.x + 3, y: c.y - 1 }],
+        { lod: p.lod });
+      S.strokeEllipse(ctx, pens.hair, b.x, b.y + 1.5, 1.4, 1.4, { lod: p.lod });
+    }
+  }
+
   NS.gear = {
-    chimney: gearChimney, flue: gearFlue, antenna: gearAntenna, tank: gearTank
+    chimney: gearChimney, flue: gearFlue, antenna: gearAntenna, tank: gearTank,
+    finial: gearFinial, cupola: gearCupola, spire: gearSpire
   };
-  NS.gearNames = ['chimney', 'flue', 'antenna', 'tank'];
+  NS.gearNames = ['chimney', 'flue', 'antenna', 'tank', 'finial', 'cupola', 'spire'];
   NS.box3 = box3;
 
   // --- ornament -------------------------------------------------------------
@@ -249,10 +374,82 @@
     S.strokePath(ctx, pens.hair, [Q(q, 0.1, 0.05), Q(q, 0.9, 0.05)], { lod: p.lod });
   }
 
+  /** Zigzag band — the stepped, faceted ornament of the setback era. */
+  function ornChevrons(ctx, frame, pens, rng, p, o) {
+    const v = o && o.v != null ? o.v : 0.9;
+    const h = o && o.h != null ? o.h : 0.05;
+    const n = Math.max(3, Math.min(18, Math.round(frame.pxWidth / 16)));
+    const pts = [];
+    for (let i = 0; i <= n * 2; i++) {
+      const u = 0.03 + (0.94 * i) / (n * 2);
+      pts.push(frame.pt(u, i % 2 === 0 ? v : v + h));
+    }
+    S.strokePath(ctx, pens.detail, pts, { lod: p.lod, width: 0.8, filament: 0 });
+    if (p.lod < 0.6) return;
+    const echo = pts.map(function (q, i) {
+      return { x: q.x, y: q.y + (i % 2 === 0 ? 3.4 : 3.4) };
+    });
+    S.strokePath(ctx, pens.hair, echo, { lod: p.lod, alpha: 0.6, filament: 0 });
+  }
+
+  /** Row of brackets carrying an overhang, just under the wall head. */
+  function ornBrackets(ctx, frame, pens, rng, p, o) {
+    const v = o && o.v != null ? o.v : 0.955;
+    const n = Math.max(3, Math.min(16, Math.round(frame.pxWidth / 20)));
+    const drop = o && o.drop != null ? o.drop : 0.05;
+    S.strokePath(ctx, pens.detail, [frame.pt(-0.02, v), frame.pt(1.02, v)],
+      { lod: p.lod, width: 0.95 });
+    if (p.lod < 0.55) return;
+    for (let i = 0; i <= n; i++) {
+      const u = 0.02 + (0.96 * i) / n;
+      const a = frame.pt(u, v);
+      const b = frame.pt(u, v - drop);
+      const c = frame.pt(u + 0.018, v - drop * 0.35);
+      S.strokePath(ctx, pens.hair, [a, b], { lod: p.lod, alpha: 0.9 });
+      if (p.lod >= 0.72) S.strokePath(ctx, pens.hair, [b, c], { lod: p.lod, alpha: 0.75 });
+    }
+  }
+
+  /** Projecting shade band running the width of the wall. */
+  function ornSunshade(ctx, frame, pens, rng, p, o) {
+    const v = o && o.v != null ? o.v : 0.6;
+    const q = [
+      frame.pt(-0.06, v), frame.pt(1.06, v),
+      frame.pt(1.03, v + 0.035), frame.pt(-0.03, v + 0.035)
+    ];
+    if (!S.quadOk(q)) return;
+    if (p.trimAccent) S.accentFill(ctx, q, p.trimAccent, rng, { alpha: 0.22 });
+    S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: 0.9 });
+    if (p.lod < 0.6) return;
+    S.hatchQuad(ctx, pens.hatch, q, { angle: 1.5, gap: 0.05, lod: p.lod, alpha: 0.4, max: 16 });
+    const n = Math.max(2, Math.min(12, Math.round(frame.pxWidth / 26)));
+    for (let i = 0; i <= n; i++) {
+      const u = 0.02 + (0.96 * i) / n;
+      S.strokePath(ctx, pens.hair, [frame.pt(u, v - 0.045), frame.pt(u, v + 0.005)],
+        { lod: p.lod, alpha: 0.8 });
+    }
+  }
+
+  /** A screened band set into the wall — shade without shutting the light out. */
+  function ornLatticeBand(ctx, frame, pens, rng, p, o) {
+    const v = o && o.v != null ? o.v : 0.5;
+    const h = o && o.h != null ? o.h : 0.16;
+    const u0 = o && o.u0 != null ? o.u0 : 0.1;
+    const u1 = o && o.u1 != null ? o.u1 : 0.9;
+    const q = frame.quad(u0, v, u1, Math.min(0.99, v + h));
+    if (!S.quadOk(q)) return;
+    AD.facade.latticePanel(ctx, q, pens, rng, p, {
+      diagonal: rng.chance(0.4), accent: p.glassAccent, width: 0.8
+    });
+  }
+
   NS.ornament = {
-    cornice: ornCornice, pilasters: ornPilasters, signage: ornSignage, ac: ornAC
+    cornice: ornCornice, pilasters: ornPilasters, signage: ornSignage, ac: ornAC,
+    chevrons: ornChevrons, brackets: ornBrackets, sunshade: ornSunshade,
+    latticeBand: ornLatticeBand
   };
-  NS.ornamentNames = ['cornice', 'pilasters', 'signage', 'ac'];
+  NS.ornamentNames = ['cornice', 'pilasters', 'signage', 'ac',
+    'chevrons', 'brackets', 'sunshade', 'latticeBand'];
 
   // --- vegetation on buildings ---------------------------------------------
   function vegWindowBox(ctx, q, pens, rng, p) {
@@ -296,7 +493,61 @@
     }
   }
 
-  NS.vegetation = { windowBox: vegWindowBox, vine: vegVine };
+  /** Potted plants standing on a sill, balcony or veranda deck. */
+  function vegPotted(ctx, q, pens, rng, p) {
+    if (!S.quadOk(q)) return;
+    const n = rng.int(1, 3);
+    for (let i = 0; i < n; i++) {
+      const u = 0.12 + rng.range(0, 0.72);
+      const w = rng.range(0.09, 0.16);
+      const pot = [
+        Q(q, u, 0.02), Q(q, u + w, 0.02),
+        Q(q, u + w * 0.82, 0.3), Q(q, u + w * 0.18, 0.3)
+      ];
+      if (!S.quadOk(pot)) continue;
+      if (p.trimAccent) S.accentFill(ctx, pot, p.trimAccent, rng, { alpha: 0.24 });
+      S.strokePoly(ctx, pens.hair, pot, { lod: p.lod, width: 0.85 });
+      if (p.lod < 0.6) continue;
+      const leaf = [
+        Q(q, u - w * 0.25, 0.28), Q(q, u + w * 1.25, 0.28),
+        Q(q, u + w * 1.1, 0.85), Q(q, u - w * 0.1, 0.85)
+      ];
+      if (p.vegAccent) S.accentFill(ctx, leaf, p.vegAccent, rng, { alpha: 0.26 });
+      S.scribbleFill(ctx, pens.hair, leaf, {
+        density: Math.round(rng.range(5, 10)), lod: p.lod, width: 0.85, alpha: 0.85
+      });
+    }
+  }
+
+  /** Trellis panel with a climber working its way up it. */
+  function vegTrellis(ctx, frame, pens, rng, p, o) {
+    const u0 = o && o.u != null ? o.u : rng.range(0.08, 0.6);
+    const w = rng.range(0.16, 0.3);
+    const vTop = rng.range(0.45, 0.85);
+    const q = frame.quad(u0, 0.02, Math.min(0.97, u0 + w), vTop);
+    if (!S.quadOk(q)) return;
+    const cells = rng.int(2, 4);
+    for (let i = 0; i <= cells; i++) {
+      S.strokePath(ctx, pens.hair, [Q(q, i / cells, 0), Q(q, i / cells, 1)],
+        { lod: p.lod, alpha: 0.8 });
+    }
+    const rows = Math.max(2, cells + rng.int(0, 2));
+    for (let i = 0; i <= rows; i++) {
+      S.strokePath(ctx, pens.hair, [Q(q, 0, i / rows), Q(q, 1, i / rows)],
+        { lod: p.lod, alpha: 0.8 });
+    }
+    if (p.lod < 0.6) return;
+    const leafy = S.subQuad(q, 0.02, 0.02, 0.98, rng.range(0.55, 0.95));
+    if (p.vegAccent) S.accentFill(ctx, leafy, p.vegAccent, rng, { alpha: 0.24 });
+    S.scribbleFill(ctx, pens.hair, leafy, {
+      density: Math.round(rng.range(7, 14)), lod: p.lod, width: 0.85, alpha: 0.8
+    });
+  }
+
+  NS.vegetation = {
+    windowBox: vegWindowBox, vine: vegVine, potted: vegPotted, trellis: vegTrellis
+  };
+  NS.vegetationNames = ['windowBox', 'vine', 'potted', 'trellis'];
 
   const root = typeof window !== 'undefined' ? window : globalThis;
   root.AD = root.AD || {};

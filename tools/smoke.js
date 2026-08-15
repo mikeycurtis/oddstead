@@ -206,6 +206,70 @@ console.log('single-building generation (120 seeds × moods × angles)');
   const kindList = Object.keys(kinds);
   if (kindList.length < 4) fail('only ' + kindList.length + ' massing kinds appeared');
   else ok('massing variety: ' + kindList.map(k => k + '×' + kinds[k]).join(', '));
+  // Headroom over the measured cost, so this catches a real regression rather
+  // than the noise of a busy machine.
+  const avg = totalMs / n;
+  if (avg > 250) fail('generate+render averaged ' + avg.toFixed(1) + ' ms (budget 250)');
+  else ok('single-sheet budget held: ' + avg.toFixed(1) + ' ms/drawing < 250');
+}
+
+console.log('mood families');
+{
+  const names = AD.style.moodNames;
+  if (names.length < 9) fail('only ' + names.length + ' mood families (need 9)');
+  else ok(names.length + ' families: ' + names.join(', '));
+
+  // Every weight table must name variants that actually exist, or a mood will
+  // silently fall back to the default and its identity disappears.
+  const registries = {
+    massing: AD.massing.recipeNames,
+    roofs: AD.roofs.roofNames,
+    facades: AD.facade.systemNames,
+    windows: AD.openings.windowNames,
+    doors: AD.openings.doorNames,
+    gear: AD.details.gearNames,
+    trees: AD.site.treeNames,
+    ornaments: AD.details.ornamentNames
+  };
+  let dangling = 0;
+  names.forEach(function (m) {
+    const mood = AD.style.moods[m];
+    if (!mood) { fail('moodNames lists "' + m + '" but moods has no entry'); return; }
+    if (!mood.label) fail(m + ' has no label for the dropdown');
+    Object.keys(registries).forEach(function (fam) {
+      const table = mood[fam];
+      if (!table) {
+        if (fam !== 'ornaments') fail(m + ' has no ' + fam + ' table');
+        return;
+      }
+      Object.keys(table).forEach(function (k) {
+        if (registries[fam].indexOf(k) < 0) {
+          fail(m + '.' + fam + ' names unknown variant "' + k + '"');
+          dangling++;
+        }
+      });
+    });
+  });
+  if (!dangling) ok('every mood weight table resolves to a real variant');
+
+  // "Any" must be able to reach every family, or new moods are dropdown-only
+  const seen = {};
+  for (let i = 0; i < 400; i++) {
+    seen[AD.building.generate('any-' + i, { mood: 'any', density: 1 }).mood] = true;
+  }
+  const unseen = names.filter(function (m) { return !seen[m]; });
+  if (unseen.length) fail('Any mode never produced: ' + unseen.join(', '));
+  else ok('Any mode samples all ' + names.length + ' families');
+
+  // and asking for a family must actually get you that family
+  let wrong = 0;
+  names.forEach(function (m) {
+    for (let i = 0; i < 5; i++) {
+      if (AD.building.generate('pick-' + m + i, { mood: m, density: 1 }).mood !== m) wrong++;
+    }
+  });
+  if (wrong) fail(wrong + ' generations ignored the requested mood');
+  else ok('each family is selectable on its own');
 }
 
 console.log('reproducibility');
@@ -272,8 +336,10 @@ console.log('plate mode');
       return;
     }
     const ms = Date.now() - t0;
+    const budget = count >= 48 ? 1200 : 900;
     if (job.done !== count) fail('plate ' + count + ' only drew ' + job.done + ' cells');
     else if (ctx._bad.length) fail('plate ' + count + ' non-finite: ' + ctx._bad[0]);
+    else if (ms > budget) fail('plate ' + count + ' took ' + ms + ' ms (budget ' + budget + ')');
     else ok('plate of ' + count + ' drew all cells in ' + ms + ' ms (' + ctx._ops + ' ops)');
   });
 
@@ -307,9 +373,13 @@ console.log('element coverage');
     railings: Object.keys(AD.details.railings).length,
     gear: Object.keys(AD.details.gear).length,
     ornament: Object.keys(AD.details.ornament).length,
+    vegetation: Object.keys(AD.details.vegetation).length,
     trees: Object.keys(AD.site.trees).length
   };
-  const min = { windows: 6, doors: 4, roofs: 5, facades: 4, railings: 3, gear: 4, ornament: 4, trees: 3 };
+  const min = {
+    windows: 11, doors: 7, roofs: 10, facades: 10,
+    railings: 5, gear: 7, ornament: 8, vegetation: 4, trees: 8
+  };
   let bad = 0;
   Object.keys(min).forEach(function (k) {
     if (counts[k] < min[k]) { fail(k + ': ' + counts[k] + ' variants, need ' + min[k]); bad++; }
@@ -345,6 +415,96 @@ console.log('element coverage');
   });
   if (!broke) ok('every opening/railing variant survives a skewed, foreshortened quad');
   void ctx;
+
+  // Roofs, ornament layers and planting are 3D-ish: they need a camera, a
+  // prism and a frame rather than a bare quad. Exercise each of them once.
+  const cam = AD.geom.makeCam({ yaw: 27, pitch: 17, scale: 16, cx: 450, cy: 700 });
+  const P = function (x, y, z) { return AD.geom.project({ x: x, y: y, z: z }, cam); };
+  const pr = AD.massing.prism(-5, -4, 10, 8, 0, 9);
+  const frame = AD.massing.makeFrame(AD.massing.prismFaces(pr)[0], cam);
+  const R = { P: P, cam: cam, pxPerUnit: cam.scale };
+  let broke3d = 0;
+  const run = function (label, fn) {
+    const c = makeCtx();
+    try { fn(c); } catch (err) {
+      fail(label + ' threw: ' + err.stack.split('\n')[0]); broke3d++; return;
+    }
+    if (c._bad.length) { fail(label + ' emitted non-finite geometry'); broke3d++; }
+    else if (c._ops < 4) { fail(label + ' drew nothing'); broke3d++; }
+  };
+
+  AD.roofs.roofNames.forEach(function (name) {
+    const rr = AD.rng.makeRng('roof:' + name);
+    const roof = {
+      variant: name, h: AD.roofs.roofHeight(name, pr, rr), ov: 0.6,
+      ridgeAxis: 'x', highSide: 'xmax', seamGap: 0.15, upturn: 0.3,
+      steps: 3, merlons: 5, tileGap: 0.1, accent: '#c1633f'
+    };
+    run('roof ' + name, function (c) {
+      AD.roofs.roofs[name](c, {
+        P: P, cam: cam, prism: pr, roof: roof, pxPerUnit: cam.scale
+      }, pens, AD.rng.makeRng('r:' + name), p);
+    });
+  });
+  AD.details.gearNames.forEach(function (name) {
+    run('gear ' + name, function (c) {
+      AD.details.gear[name](c, R, pens, AD.rng.makeRng('g:' + name), p,
+        { prism: 0, type: name, x: 0, y: 9, z: 0, size: 0.9 });
+    });
+  });
+  AD.details.ornamentNames.forEach(function (name) {
+    run('ornament ' + name, function (c) {
+      AD.details.ornament[name](c, frame, pens, AD.rng.makeRng('o:' + name), p, {});
+    });
+  });
+  AD.site.treeNames.forEach(function (name) {
+    run('tree ' + name, function (c) {
+      const rr = AD.rng.makeRng('t:' + name);
+      AD.site.trees[name](c, R, pens, rr, p,
+        { type: name, x: 7, z: 2, h: AD.site.treeHeight(name, rr) });
+    });
+  });
+  run('planter', function (c) {
+    AD.site.planter(c, R, pens, AD.rng.makeRng('planter'), p,
+      { x: 1, z: 4.6, w: 1.4, d: 0.7, h: 0.5, tall: true });
+  });
+  run('ground planting', function (c) {
+    AD.site.groundPlanting(c, R, pens, AD.rng.makeRng('tufts'), p,
+      { x: 0, z: 4.4, spread: 1.2, n: 4, scale: 1 });
+  });
+  ['windowBox', 'potted'].forEach(function (name) {
+    run('vegetation ' + name, function (c) {
+      AD.details.vegetation[name](c, skew, pens, AD.rng.makeRng('v:' + name), p);
+    });
+  });
+  run('vegetation trellis', function (c) {
+    AD.details.vegetation.trellis(c, frame, pens, AD.rng.makeRng('v:trellis'), p, {});
+  });
+  run('vegetation vine', function (c) {
+    AD.details.vegetation.vine(c, frame, pens, AD.rng.makeRng('v:vine'), p, {});
+  });
+
+  // façade systems get a real frame and a plausible config
+  const cfg = {
+    system: 'grid', win: 'lattice', altWin: null, floors: 4, bays: 4,
+    marginU: 0.08, marginBottom: 0.03, marginTop: 0.04, winW: 0.55, winH: 0.6,
+    floorLines: true, skip: 0, balconyP: 0.5, railing: 'lattice',
+    hatchAngle: -0.9, hatchGap: 0.08, sparse: 0.1, arcadeDense: true,
+    mullions: true, screenP: 0.5, screenDiagonal: true, posts: 4, braceP: 0.4,
+    potP: 0.5, windowBoxP: 0.5, shadow: false, hasDoor: true, door: 'gateway',
+    doorBay: 1, doorW: 0.7, doorH: 0.85, ornaments: []
+  };
+  AD.facade.systemNames.forEach(function (name) {
+    run('facade ' + name, function (c) {
+      AD.facade.systems[name](c, frame, pens, AD.rng.makeRng('f:' + name), p, cfg);
+    });
+  });
+  if (!broke3d) {
+    ok('every roof, gear, ornament, façade and planting variant inks cleanly ' +
+      '(' + (AD.roofs.roofNames.length + AD.details.gearNames.length +
+        AD.details.ornamentNames.length + AD.site.treeNames.length +
+        AD.facade.systemNames.length + 6) + ' checks)');
+  }
 }
 
 console.log('');
