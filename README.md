@@ -38,6 +38,7 @@ Opening `index.html` directly may work, but a local server is recommended.
 - **View angle**: orbit around the buildings
 - **Eye height**: change the camera elevation
 - **Detail**: adjust rendering density
+- **Monumentality**: change the generated building's footprint and height hierarchy without changing its seed
 - **Opaque walls**: add paper backing to wall and roof surfaces
 - **Animate drawing**: replay the generated ink in draw order
 - **Record video**: capture the canvas, then choose whether to save or delete it

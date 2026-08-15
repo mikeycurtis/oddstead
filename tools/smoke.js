@@ -502,9 +502,9 @@ console.log('plate mode');
 console.log('url state');
 {
   const q = AD.exporter.queryString({
-    seed: 'k7x2mp', mode: 'plate', mood: 'town', yaw: 24.456, pitch: 16, density: 1.2, count: 24
+    seed: 'k7x2mp', mode: 'plate', mood: 'town', yaw: 24.456, pitch: 16, density: 1.2, monumentality: 1.3, count: 24
   });
-  ['seed=k7x2mp', 'mode=plate', 'mood=town', 'yaw=24.46', 'density=1.2', 'count=24'].forEach(function (frag) {
+  ['seed=k7x2mp', 'mode=plate', 'mood=town', 'yaw=24.46', 'density=1.2', 'monumentality=1.3', 'count=24'].forEach(function (frag) {
     if (q.indexOf(frag) < 0) fail('query string missing ' + frag + ' (' + q + ')');
   });
   const back = AD.exporter.readState({ seed: 'zzz', mode: 'single' });

@@ -1,9 +1,9 @@
 // js/main.js — boot, state, UI wiring, render orchestration.
 //
-// State discipline: seed / mood / density determine the DESIGN (changing them
-// regenerates the plan); yaw / pitch / mode / plate size only determine the
-// VIEW (changing them re-renders the same plan). That is why dragging the orbit
-// sliders never turns your building into a different building.
+// State discipline: seed / mood / density / monumentality determine the DESIGN
+// (changing them regenerates the plan); yaw / pitch / mode / plate size only
+// determine the VIEW (changing them re-renders the same plan). That is why
+// dragging the orbit sliders never turns your building into a different building.
 (function () {
   'use strict';
 
@@ -17,6 +17,7 @@
     yaw: 24,
     pitch: 16,
     density: 1,
+    monumentality: 1,
     count: 24,
     opaqueWalls: false,
     focus: null
@@ -52,6 +53,7 @@
     state.yaw = clamp(isFinite(state.yaw) ? state.yaw : 24, -180, 180);
     state.pitch = clamp(isFinite(state.pitch) ? state.pitch : 16, 2, 38);
     state.density = clamp(isFinite(state.density) ? state.density : 1, 0.4, 1.6);
+    state.monumentality = clamp(isFinite(state.monumentality) ? state.monumentality : 1, 0.7, 1.4);
     state.count = AD.plate.counts.indexOf(+state.count) >= 0 ? +state.count : 24;
     state.opaqueWalls = state.opaqueWalls === true || state.opaqueWalls === 'true' || state.opaqueWalls === 1;
     state.focus = state.mode === 'plate' && state.focus !== null && state.focus !== '' && Number.isInteger(+state.focus) && +state.focus >= 0 && +state.focus < state.count ? +state.focus : null;
@@ -112,9 +114,10 @@
   function ensurePlan() {
     if (plan && plan.seed === state.seed &&
       plan.density === state.density &&
+      plan.monumentality === state.monumentality &&
       plan.requestedMood === state.mood) return plan;
     const t0 = now();
-    plan = AD.building.generate(state.seed, { mood: state.mood, density: state.density });
+    plan = AD.building.generate(state.seed, { mood: state.mood, density: state.density, monumentality: state.monumentality });
     plan.requestedMood = state.mood;
     if (debug) console.log('[antitecture] generate', (now() - t0).toFixed(1) + 'ms', plan.kind, plan.mood);
     return plan;
@@ -198,7 +201,7 @@
         // progressive: the plate visibly inks itself, cell by cell
         job = AD.plate.create(ctx, {
           seed: state.seed, count: state.count, mood: state.mood,
-          density: state.density, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
+          density: state.density, monumentality: state.monumentality, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
           focusIndex: focusIndex, focusProgress: focusProgress,
           showBackground: focusBackground,
           w: cssW, h: cssH
@@ -249,7 +252,7 @@
     } else {
       AD.plate.create(c, {
         seed: state.seed, count: state.count, mood: state.mood,
-        density: state.density, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
+        density: state.density, monumentality: state.monumentality, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
         focusIndex: state.focus, focusProgress: state.focus == null ? 0 : 1,
         w: lw, h: lh
       }).finish();
@@ -508,10 +511,12 @@
     el.yaw.value = String(state.yaw);
     el.pitch.value = String(state.pitch);
     el.density.value = String(state.density);
+    el.monumentality.value = String(state.monumentality);
     el.opaqueWalls.checked = state.opaqueWalls;
     el.yawOut.textContent = Math.round(state.yaw) + '°';
     el.pitchOut.textContent = Math.round(state.pitch) + '°';
     el.densityOut.textContent = Number(state.density).toFixed(1) + '×';
+    el.monumentalityOut.textContent = Number(state.monumentality).toFixed(1) + '×';
     el.countWrap.hidden = state.mode !== 'plate';
     el.countWrap.setAttribute('aria-hidden', state.mode !== 'plate' ? 'true' : 'false');
   }
@@ -532,9 +537,11 @@
     el.yaw = document.getElementById('yaw');
     el.pitch = document.getElementById('pitch');
     el.density = document.getElementById('density');
+    el.monumentality = document.getElementById('monumentality');
     el.yawOut = document.getElementById('yaw-out');
     el.pitchOut = document.getElementById('pitch-out');
     el.densityOut = document.getElementById('density-out');
+    el.monumentalityOut = document.getElementById('monumentality-out');
     el.opaqueWalls = document.getElementById('opaque-walls');
     el.status = document.getElementById('status');
     el.recordingDialog = document.getElementById('recording-dialog');
@@ -587,6 +594,12 @@
     el.density.addEventListener('input', function () {
       state.density = +el.density.value;
       el.densityOut.textContent = Number(state.density).toFixed(1) + '×';
+      plan = null;
+      render();
+    });
+    el.monumentality.addEventListener('input', function () {
+      state.monumentality = +el.monumentality.value;
+      el.monumentalityOut.textContent = Number(state.monumentality).toFixed(1) + '×';
       plan = null;
       render();
     });

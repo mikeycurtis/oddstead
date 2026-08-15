@@ -183,6 +183,7 @@
     opts = opts || {};
     const master = AD.rng.makeRng(seed);
     const density = clamp(opts.density == null ? 1 : opts.density, 0.2, 2);
+    const monumentality = clamp(opts.monumentality == null ? 1 : opts.monumentality, 0.7, 1.4);
 
     const moodRng = master.fork('mood');
     let mood = opts.mood && opts.mood !== 'any' ? opts.mood : moodRng.pick(ST.moodNames);
@@ -196,7 +197,8 @@
 
     const massRng = master.fork('massing');
     const kind = massRng.weightedKey(cfgMood.massing);
-    const mass = M.build(ST.moods[mood].massing[kind] !== undefined ? kind : 'slab', massRng, cfgMood);
+    const buildCfg = Object.assign({}, cfgMood, { monumentality: monumentality });
+    const mass = M.build(ST.moods[mood].massing[kind] !== undefined ? kind : 'slab', massRng, buildCfg);
 
     // which prisms are capped by another volume (tower setbacks) -> no roof
     mass.prisms.forEach(function (p, i) {
@@ -410,6 +412,7 @@
       seed: String(seed),
       mood: mood,
       density: density,
+      monumentality: monumentality,
       penName: penName,
       accents: accents,
       flora: flora,

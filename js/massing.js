@@ -14,6 +14,38 @@
     return { x: x, z: z, w: w, d: d, y0: y0, h: h };
   }
 
+  // Deterministic footprint helpers. Recipes can use these to describe
+  // courtyards, battered walls, and irregular compounds without introducing
+  // ambient randomness into the design stream.
+  function polygonRect(x, z, w, d) {
+    return [{ x: x, z: z }, { x: x + w, z: z },
+      { x: x + w, z: z + d }, { x: x, z: z + d }];
+  }
+
+  function polygonChamferedRect(x, z, w, d, c) {
+    c = Math.max(0, Math.min(Math.min(w, d) * 0.45, c == null ? 0.7 : c));
+    return [{ x: x + c, z: z }, { x: x + w - c, z: z },
+      { x: x + w, z: z + c }, { x: x + w, z: z + d - c },
+      { x: x + w - c, z: z + d }, { x: x + c, z: z + d },
+      { x: x, z: z + d - c }, { x: x, z: z + c }];
+  }
+
+  function polygonIrregularRect(rng, x, z, w, d, variance) {
+    const p = polygonChamferedRect(x, z, w, d, Math.min(w, d) * 0.12);
+    const v = Math.max(0, variance == null ? 0.12 : variance);
+    return p.map(function (q, i) {
+      const edge = i % 2 ? d : w;
+      return { x: q.x + rng.range(-w * v, w * v) * (edge === w ? 1 : 0.45),
+        z: q.z + rng.range(-d * v, d * v) * (edge === d ? 1 : 0.45) };
+    });
+  }
+
+  function polygonBounds(poly) {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    poly.forEach(function (p) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); });
+    return { x: x0, z: z0, w: x1 - x0, d: z1 - z0 };
+  }
+
   function prismCorners(p) {
     const x0 = p.x, x1 = p.x + p.w, z0 = p.z, z1 = p.z + p.d;
     const ya = p.y0, yb = p.y0 + p.h;
@@ -386,10 +418,21 @@
         isFinite(p.x) && isFinite(p.z) && isFinite(p.h);
     });
     if (!mass.prisms.length) mass.prisms = [prism(-5, -4, 10, 8, 0, 9)];
+    const m = Math.max(0.7, Math.min(1.4, cfg && cfg.monumentality != null ? cfg.monumentality : 1));
+    const hs = Math.pow(m, 1.18);
+    mass.prisms.forEach(function (p) {
+      p.x *= m; p.z *= m; p.w *= m; p.d *= m;
+      p.y0 *= hs; p.h *= hs;
+    });
+    mass.monumentality = m;
     return centre(mass);
   }
 
   NS.prism = prism;
+  NS.polygonRect = polygonRect;
+  NS.polygonChamferedRect = polygonChamferedRect;
+  NS.polygonIrregularRect = polygonIrregularRect;
+  NS.polygonBounds = polygonBounds;
   NS.prismCorners = prismCorners;
   NS.prismCentroid = prismCentroid;
   NS.prismFaces = prismFaces;

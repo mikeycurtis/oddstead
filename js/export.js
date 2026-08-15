@@ -15,6 +15,7 @@
     yaw: 'number',
     pitch: 'number',
     density: 'number',
+    monumentality: 'number',
     count: 'number',
     opaqueWalls: 'boolean',
     focus: 'number'

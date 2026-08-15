@@ -103,6 +103,7 @@
     const o = {
       seed: String(opts.seed), count: count, mood: opts.mood || 'any',
       density: opts.density == null ? 1 : opts.density,
+      monumentality: opts.monumentality == null ? 1 : opts.monumentality,
       view: opts.view || { yaw: 22, pitch: 16 },
       w: opts.w, h: opts.h,
       focusIndex: opts.focusIndex == null ? null : +opts.focusIndex,
@@ -159,7 +160,7 @@
     let plan = null;
     S.setCaptureGroup(i);
     try {
-      plan = AD.building.generate(seed, { mood: o.mood, density: o.density });
+      plan = AD.building.generate(seed, { mood: o.mood, density: o.density, monumentality: o.monumentality });
       AD.building.render(ctx, plan, view, rect, lod);
     } catch (err) {
       if (typeof console !== 'undefined') console.error('plate cell ' + i + ' failed', err);
