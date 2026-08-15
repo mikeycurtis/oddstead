@@ -504,7 +504,9 @@
       });
     }
 
-    const small = frame.pxWidth < 26 || frame.pxHeight < 26;
+    // A side wall can be narrow in projection while still being a perfectly
+    // visible façade. Do not discard its windows at the old 26px cutoff.
+    const small = frame.pxWidth < 12 || frame.pxHeight < 12;
     if (small) {
       // too small to read: a couple of ticks stand in for a façade
       if (lod >= 0.4 && frame.pxWidth > 8 && frame.pxHeight > 8) {

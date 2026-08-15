@@ -13,7 +13,12 @@
   function sub(q, u0, v0, u1, v1) { return S.subQuad(q, u0, v0, u1, v1); }
   function tiny(q, min) {
     const s = S.quadSize(q);
-    return s.w < (min || 6) || s.h < (min || 6);
+    // Oblique façades foreshorten window bays aggressively. Keep a lower
+    // threshold so a real, visible window does not vanish just because the
+    // camera is off-axis; the stroke pipeline still rejects truly degenerate
+    // quads via quadOk().
+    const threshold = Math.max(2.2, (min || 6) * 0.68);
+    return s.w < threshold || s.h < threshold;
   }
 
   // arc across the top of a quad, in UV space, mapped through the quad
