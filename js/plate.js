@@ -87,11 +87,12 @@
       w: opts.w, h: opts.h,
       focusIndex: opts.focusIndex == null ? null : +opts.focusIndex,
       focusProgress: clamp(opts.focusProgress == null ? (opts.focusIndex == null ? 0 : 1) : opts.focusProgress, 0, 1),
+      showBackground: opts.showBackground === true,
       showCaptions: opts.showCaptions !== false
     };
     const lod = lodFor(count);
     ctx.save();
-    ctx.globalAlpha = 1 - o.focusProgress;
+    ctx.globalAlpha = o.showBackground ? 1 : 1 - o.focusProgress;
     drawHeader(ctx, o, o.seed);
     ctx.restore();
 
@@ -129,8 +130,8 @@
       h: baseRect.h + (targetRect.h - baseRect.h) * p,
       pad: baseRect.pad
     } : baseRect;
-    const opacity = focused && !isFocus ? 1 - p : 1;
-    if (focused && !isFocus) return;
+    const opacity = o.showBackground ? 1 : (focused && !isFocus ? 1 - p : 1);
+    if (focused && !isFocus && !o.showBackground) return;
     const jitter = AD.rng.makeRng(seed + ':view');
     // per-cell yaw variation so the plate reads as varied studies, not a stamp
     const view = {
