@@ -112,8 +112,10 @@
   }
   function render(ctx, city, opts) {
     opts = opts || {};
-    const w = opts.w, h = opts.h, lod = opts.lod == null ? 0.72 : opts.lod;
+    const w = opts.w, h = opts.h;
+    const baseLod = opts.lod == null ? 0.72 : opts.lod;
     const zoom = clamp(opts.zoom == null ? 1 : opts.zoom, 1, 5);
+    const lod = Math.min(1, baseLod + (zoom - 1) * 0.14);
     const cam = G.makeCam({ yaw: opts.yaw, pitch: opts.pitch, scale: Math.min(w / 218, h / 190) * zoom,
       cx: w / 2 + (opts.panX || 0) * w * 0.5, cy: h * 0.58 + (opts.panY || 0) * h * 0.5 });
     const R = { P: function (x, y, z) { return G.project({ x: x, y: y, z: z }, cam); }, cam: cam };

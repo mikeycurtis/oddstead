@@ -698,7 +698,7 @@
     let pinch = null;
     let suppressClick = false;
     canvas.addEventListener('pointerdown', function (e) {
-      if (e.button != null && e.button !== 0) return;
+      if (e.button != null && e.button !== 0 && e.button !== 2) return;
       pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
       if (state.mode === 'city' && Object.keys(pointers).length === 2) {
         const ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
@@ -708,7 +708,7 @@
         return;
       }
       drag = { id: e.pointerId, x: e.clientX, startX: e.clientX, startY: e.clientY, moved: false,
-        yaw: state.yaw, pitch: state.pitch, panX: state.panX, panY: state.panY, city: state.mode === 'city' };
+        yaw: state.yaw, pitch: state.pitch, panX: state.panX, panY: state.panY, city: state.mode === 'city', rotate: state.mode === 'city' && (e.button === 2 || e.shiftKey) };
       try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
       canvas.classList.add('is-dragging');
     });
@@ -728,7 +728,14 @@
       const dy = e.clientY - drag.startY;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.moved = true;
       if (!drag.moved) return;
-      if (drag.city) {
+      if (drag.city && drag.rotate) {
+        state.yaw = wrapYaw(drag.yaw - dx * 0.55);
+        state.pitch = clamp(drag.pitch - dy * 0.24, 2, 38);
+        el.yaw.value = String(state.yaw);
+        el.pitch.value = String(state.pitch);
+        el.yawOut.textContent = Math.round(state.yaw) + '°';
+        el.pitchOut.textContent = Math.round(state.pitch) + '°';
+      } else if (drag.city) {
         const box = canvas.getBoundingClientRect();
         state.panX = clamp(drag.panX + dx / Math.max(1, box.width) * 2, -1.5, 1.5);
         state.panY = clamp(drag.panY + dy / Math.max(1, box.height) * 2, -1.5, 1.5);
@@ -760,6 +767,9 @@
     canvas.addEventListener('click', function (e) {
       if (suppressClick) { suppressClick = false; e.preventDefault(); return; }
       handleCanvasClick(e);
+    });
+    canvas.addEventListener('contextmenu', function (e) {
+      if (state.mode === 'city') e.preventDefault();
     });
     canvas.addEventListener('wheel', function (e) {
       if (state.mode !== 'city') return;
