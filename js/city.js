@@ -74,6 +74,24 @@
     return plan;
   }
 
+  function makePark(x0, x1, z0, z1, role, rng) {
+    const w = Math.max(1, x1 - x0), d = Math.max(1, z1 - z0);
+    const count = Math.max(3, Math.min(18, Math.round((w * d) / 150)));
+    const trees = [];
+    for (let i = 0; i < count; i++) trees.push({
+      x: rng.range(x0 + w * 0.12, x1 - w * 0.12),
+      z: rng.range(z0 + d * 0.12, z1 - d * 0.12),
+      r: rng.range(0.65, 1.25), h: rng.range(2.8, 5.2),
+      type: rng.pick(['deciduous', 'cypress', 'fruit'])
+    });
+    const amenity = rng.pick(['fountain', 'garden', 'market-green', 'play-court']);
+    return {
+      x0: x0, x1: x1, z0: z0, z1: z1, x: (x0 + x1) / 2, z: (z0 + z1) / 2,
+      role: role, elevation: heightAt((x0 + x1) / 2, (z0 + z1) / 2), trees: trees,
+      amenity: amenity, pathT: rng.range(0.25, 0.75)
+    };
+  }
+
   function generate(seed, opts) {
     opts = opts || {};
     const rng = AD.rng.makeRng(String(seed) + ':city');
@@ -97,7 +115,11 @@
       const drift = streetRng.range(-5, 5);
       roads.push(lineRoad('long-' + i, 'secondary', [{ x: B.x0 + 8, z: z }, { x: B.x1 - 2, z: z + drift }], i === 2 ? 4.8 : 3.2));
     });
-    const civic = { x0: -17, x1: 18, z0: -18, z1: 18, x: 0, z: 0, role: 'civic', elevation: heightAt(0, 0) };
+    const civicRng = rng.fork('civic-space');
+    const civicActive = civicRng.chance(0.58);
+    const civicW = civicRng.range(24, 43), civicD = civicRng.range(24, 43);
+    const civicX = civicRng.range(-30, 38), civicZ = civicRng.range(-18, 28);
+    const civic = { x0: civicX - civicW / 2, x1: civicX + civicW / 2, z0: civicZ - civicD / 2, z1: civicZ + civicD / 2, x: civicX, z: civicZ, role: civicActive ? 'civic' : 'civic-park', active: civicActive, elevation: heightAt(civicX, civicZ) };
     const blocks = [], parcels = [], parks = [];
     function densify(values) {
       const out = [];
@@ -117,12 +139,13 @@
       if (cx > civic.x0 - 4 && cx < civic.x1 + 4 && cz > civic.z0 - 4 && cz < civic.z1 + 4) continue;
       const br = rng.fork('block:' + bi++);
       const role = Math.abs(cx) < 33 && Math.abs(cz) < 33 ? 'market' : (cx > 35 ? 'hill' : (cz > 42 ? 'waterfront' : 'ordinary'));
-      if (br.chance(role === 'ordinary' ? 0.13 : 0.08)) { parks.push({ x0: x0 + 2, x1: x1 - 2, z0: z0 + 2, z1: z1 - 2, x: cx, z: cz, role: 'park', elevation: heightAt(cx, cz) }); continue; }
+      if (br.chance(role === 'ordinary' ? 0.13 : 0.08)) { parks.push(makePark(x0 + 2, x1 - 2, z0 + 2, z1 - 2, 'park', br.fork('park'))); continue; }
       blocks.push({ x0: x0, x1: x1, z0: z0, z1: z1, x: cx, z: cz, role: role });
       const ps = parcel(x0, x1, z0, z1, role, Math.abs(x1 - x0) > Math.abs(z1 - z0) ? 'eastWest' : 'northSouth', br, bi, latticeScale);
       if (ps) ps.forEach(function (p) { parcels.push(p); });
     }
-    parcels.unshift({ x0: civic.x0 + 4, x1: civic.x1 - 4, z0: civic.z0 + 4, z1: civic.z1 - 4, x: 0, z: 0, w: 27, d: 27, role: 'civic', road: 'eastWest', setback: 4, elevation: heightAt(0, 0), rotation: 0, seedTag: 0 });
+    if (civic.active) parcels.unshift({ x0: civic.x0 + 4, x1: civic.x1 - 4, z0: civic.z0 + 4, z1: civic.z1 - 4, x: civic.x, z: civic.z, w: civic.x1 - civic.x0 - 8, d: civic.z1 - civic.z0 - 8, role: 'civic', road: 'eastWest', setback: 4, elevation: civic.elevation, rotation: 0, seedTag: 0 });
+    else parks.unshift(makePark(civic.x0, civic.x1, civic.z0, civic.z1, 'civic-park', civicRng.fork('park')));
     const target = Math.min(size, parcels.length);
     const selected = [parcels[0]];
     const available = parcels.slice(1);
@@ -174,13 +197,37 @@
       for (let i = 0; i <= 16; i++) { const x = 25 + i * 4; pts.push({ x: x, z: z + Math.sin(i * 0.65 + z) * 1.5 }); }
       S.strokePath(ctx, pens.hair, worldPath(R, pts, heightAt(45, z) + 0.08), { lod: lod, alpha: 0.28, width: 0.72 });
     }
-    city.parks.forEach(function (p, i) {
+    city.parks.forEach(function (p) {
       const q = [{ x: p.x0, z: p.z0 }, { x: p.x1, z: p.z0 }, { x: p.x1, z: p.z1 }, { x: p.x0, z: p.z1 }];
-      fillPoly(ctx, worldPath(R, q, p.elevation), '#c7d3b6', 0.5);
-      if (lod > 0.5) S.strokePath(ctx, pens.hair, worldPath(R, [{ x: p.x0 + 2, z: p.z0 + 2 }, { x: p.x1 - 2, z: p.z1 - 2 }], p.elevation + 0.08), { lod: lod, alpha: 0.45 });
+      fillPoly(ctx, worldPath(R, q, p.elevation), '#c7d3b6', p.role === 'civic-park' ? 0.62 : 0.5);
+      if (lod > 0.5) {
+        const px = p.x0 + (p.x1 - p.x0) * p.pathT;
+        const pz = p.z0 + (p.z1 - p.z0) * p.pathT;
+        S.strokePath(ctx, pens.hair, worldPath(R, [{ x: p.x0 + 1, z: pz }, { x: p.x1 - 1, z: pz }], p.elevation + 0.08), { lod: lod, alpha: 0.5, width: 0.7 });
+        S.strokePath(ctx, pens.hair, worldPath(R, [{ x: px, z: p.z0 + 1 }, { x: px, z: p.z1 - 1 }], p.elevation + 0.09), { lod: lod, alpha: 0.42, width: 0.65 });
+      }
     });
     city.roads.forEach(function (road) {
       fillPoly(ctx, worldPath(R, roadBand(road), 0.08), road.kind === 'primary' ? '#d8cdb8' : '#e2d9c9', road.kind === 'primary' ? 0.78 : 0.58);
+    });
+    city.parks.forEach(function (p) {
+      if (lod < 0.5) return;
+      p.trees.forEach(function (t) {
+        const base = R.P(t.x, p.elevation + 0.1, t.z);
+        const top = R.P(t.x, p.elevation + t.h, t.z);
+        ctx.save();
+        ctx.strokeStyle = '#706452'; ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(top.x, top.y); ctx.stroke();
+        ctx.fillStyle = t.type === 'cypress' ? '#6f896c' : t.type === 'fruit' ? '#8d9b69' : '#78917a';
+        ctx.beginPath(); ctx.arc(top.x, top.y, Math.max(1.8, t.r * cam.scale * 0.42), 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      });
+      const a = R.P(p.x, p.elevation + 0.14, p.z);
+      ctx.save(); ctx.strokeStyle = '#8f8067'; ctx.fillStyle = '#e4d8bd'; ctx.lineWidth = 0.8;
+      if (p.amenity === 'fountain') { ctx.beginPath(); ctx.arc(a.x, a.y, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      else if (p.amenity === 'play-court') { ctx.beginPath(); ctx.moveTo(a.x - 5, a.y - 3); ctx.lineTo(a.x + 5, a.y - 3); ctx.lineTo(a.x + 5, a.y + 3); ctx.lineTo(a.x - 5, a.y + 3); ctx.closePath(); ctx.stroke(); }
+      else { ctx.beginPath(); ctx.arc(a.x, a.y, 2.2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
     });
     city.blocks.forEach(function (b) {
       const q = [{ x: b.x0 + 1, z: b.z0 + 1 }, { x: b.x1 - 1, z: b.z0 + 1 }, { x: b.x1 - 1, z: b.z1 - 1 }, { x: b.x0 + 1, z: b.z1 - 1 }];
@@ -192,9 +239,11 @@
       AD.building.render(ctx, bp, { cam: cam, yaw: opts.yaw, pitch: opts.pitch, opaqueWalls: true, origin: { x: b.x, y: b.elevation, z: b.z }, rotation: b.rotation }, { x: 0, y: 0, w: w, h: h, pad: 0.08 }, lod);
     });
     const civic = city.civic;
-    const cq = [{ x: civic.x0, z: civic.z0 }, { x: civic.x1, z: civic.z0 }, { x: civic.x1, z: civic.z1 }, { x: civic.x0, z: civic.z1 }];
-    fillPoly(ctx, worldPath(R, cq, civic.elevation), '#d9cfbb', 0.28);
-    ctx.save(); ctx.fillStyle = ST.caption.color; ctx.font = ST.caption.small; ctx.fillText('CIVIC CORE', R.P(0, civic.elevation + 0.2, -20).x - 30, R.P(0, civic.elevation + 0.2, -20).y); ctx.restore();
+    if (civic.active) {
+      const cq = [{ x: civic.x0, z: civic.z0 }, { x: civic.x1, z: civic.z0 }, { x: civic.x1, z: civic.z1 }, { x: civic.x0, z: civic.z1 }];
+      fillPoly(ctx, worldPath(R, cq, civic.elevation), '#d9cfbb', 0.28);
+      ctx.save(); ctx.fillStyle = ST.caption.color; ctx.font = ST.caption.small; ctx.fillText('CIVIC CORE', R.P(civic.x, civic.elevation + 0.2, civic.z - (civic.z1 - civic.z0) * 0.58).x - 30, R.P(civic.x, civic.elevation + 0.2, civic.z - (civic.z1 - civic.z0) * 0.58).y); ctx.restore();
+    }
     ctx.save(); ctx.fillStyle = ST.caption.color; ctx.font = ST.caption.small; ctx.fillText('WATERFRONT', w * 0.055, h * 0.91); ctx.restore();
   }
   NS.generate = generate;

@@ -40,7 +40,7 @@ Opening `index.html` directly may work, but a local server is recommended.
 - **Detail**: adjust rendering density
 - **Monumentality**: change the generated building's footprint and height hierarchy without changing its seed
 - **Domed roofs**: deterministic drum-supported, ribbed, and onion dome profiles with solid backing and finials
-- **City mode**: deterministic waterfront cities with seed-generated coastlines and connected street networks, blocks, parcels, civic core, parks, hill contours, a `1×–5×` district-scale control, and city building-count toggles up to `384` buildings
+- **City mode**: deterministic waterfront cities with seed-generated coastlines and connected street networks, blocks, parcels, randomized civic buildings or tree-filled civic parks, multiple functional parks with internal paths and amenities, hill contours, a `1×–5×` district-scale control, and city building-count toggles up to `384` buildings
 - **Opaque walls**: add paper backing to wall and roof surfaces
 - **Animate drawing**: replay the generated ink in draw order
 - **Record video**: capture the canvas, then choose whether to save or delete it
