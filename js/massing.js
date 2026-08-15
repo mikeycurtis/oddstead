@@ -206,40 +206,147 @@
     const w = rng.range(12, 17), d = rng.range(10, 14);
     const wallH = cfg.floorHeight * rng.range(1.2, 2.1);
     const towerW = rng.range(2.4, 3.5), towerH = cfg.floorHeight * rng.range(3.5, 6.5);
-    const prisms = [prism(-w / 2, -d / 2, w, d, 0, wallH)];
-    [[-w / 2, -d / 2], [w / 2 - towerW, -d / 2],
-      [-w / 2, d / 2 - towerW], [w / 2 - towerW, d / 2 - towerW]].forEach(function (p) {
-      prisms.push(prism(p[0], p[1], towerW, towerW, 0, towerH));
-    });
-    if (rng.chance(0.7)) {
-      const kw = w * rng.range(0.35, 0.52), kd = d * rng.range(0.35, 0.52);
-      prisms.push(prism(-kw / 2, -kd / 2, kw, kd, wallH, towerH * rng.range(0.55, 0.9)));
+    const t = rng.range(0.8, 1.25);
+    const profile = rng.weightedKey({ concentric: 3, motte: 2, compact: 2 });
+    const prisms = [];
+    // A curtain wall is a perimeter, not a solid block. Leave the bailey open so
+    // the courtyard and the gatehouse read in projection.
+    prisms.push(prism(-w / 2, -d / 2, w, t, 0, wallH));
+    prisms.push(prism(-w / 2, d / 2 - t, w, t, 0, wallH));
+    prisms.push(prism(-w / 2, -d / 2 + t, t, d - t * 2, 0, wallH));
+    prisms.push(prism(w / 2 - t, -d / 2 + t, t, d - t * 2, 0, wallH));
+    if (profile === 'concentric') {
+      const iw = w * rng.range(0.56, 0.72), id = d * rng.range(0.54, 0.7), it = t * 0.7;
+      const ih = wallH * rng.range(0.8, 1.25);
+      prisms.push(prism(-iw / 2, -id / 2, iw, it, wallH * 0.18, ih));
+      prisms.push(prism(-iw / 2, id / 2 - it, iw, it, wallH * 0.18, ih));
+      prisms.push(prism(-iw / 2, -id / 2 + it, it, id - it * 2, wallH * 0.18, ih));
+      prisms.push(prism(iw / 2 - it, -id / 2 + it, it, id - it * 2, wallH * 0.18, ih));
+    } else if (profile === 'motte') {
+      const mw = w * rng.range(0.45, 0.65), md = d * rng.range(0.4, 0.58);
+      prisms.push(prism(-mw / 2, -md / 2, mw, md, 0, wallH * 0.7));
+    }
+    if (profile !== 'compact') {
+      [[-w / 2, -d / 2], [w / 2 - towerW, -d / 2],
+        [-w / 2, d / 2 - towerW], [w / 2 - towerW, d / 2 - towerW]].forEach(function (p) {
+        prisms.push(prism(p[0], p[1], towerW, towerW, 0, towerH));
+      });
+    } else {
+      const kw = w * rng.range(0.32, 0.5), kd = d * rng.range(0.32, 0.5);
+      prisms.push(prism(-kw / 2, -kd / 2, kw, kd, wallH, towerH * rng.range(0.7, 1.1)));
+    }
+    // A gatehouse projects toward the front bailey, while the keep may sit
+    // central or against a rear curtain wall depending on the seed.
+    const gateW = rng.range(2.8, 4.4), gateD = rng.range(1.4, 2.3);
+    prisms.push(prism(-gateW / 2, d / 2 - gateD * 0.35, gateW, gateD, 0,
+      wallH * rng.range(1.2, 1.8)));
+    if (rng.chance(0.82)) {
+      const kw = w * rng.range(0.28, 0.45), kd = d * rng.range(0.28, 0.45);
+      const rear = rng.chance(0.65);
+      prisms.push(prism(-kw / 2 + (rear ? 0 : rng.range(-2, 2)),
+        rear ? -d / 2 + t : -kd / 2, kw, kd, wallH * 0.55,
+        towerH * rng.range(0.55, 0.95)));
     }
     return { kind: 'castle', prisms: prisms };
   }
 
-  function recipeSteppedTemple(rng, cfg) {
-    const baseW = rng.range(12, 18), baseD = rng.range(10, 15);
-    const baseH = cfg.floorHeight * rng.range(0.45, 0.75);
-    const midW = baseW * rng.range(0.68, 0.8), midD = baseD * rng.range(0.68, 0.8);
-    const topW = midW * rng.range(0.62, 0.78), topD = midD * rng.range(0.62, 0.78);
-    const prisms = [
-      prism(-baseW / 2, -baseD / 2, baseW, baseD, 0, baseH),
-      prism(-midW / 2, -midD / 2, midW, midD, baseH, baseH * rng.range(0.8, 1.25)),
-      prism(-topW / 2, -topD / 2, topW, topD, baseH * 2, cfg.floorHeight * rng.range(1.5, 2.8))
-    ];
-    return { kind: 'steppedTemple', prisms: prisms };
+  function recipeJapaneseCastle(rng, cfg) {
+    const baseW = rng.range(12, 17), baseD = rng.range(10, 14);
+    const stoneH = cfg.floorHeight * rng.range(0.8, 1.35);
+    const prisms = [prism(-baseW / 2, -baseD / 2, baseW, baseD, 0, stoneH)];
+    const tiers = rng.int(3, 5);
+    let w = baseW * rng.range(0.58, 0.72), d = baseD * rng.range(0.58, 0.72);
+    let y = stoneH;
+    for (let i = 0; i < tiers; i++) {
+      const h = cfg.floorHeight * rng.range(0.8, 1.18);
+      prisms.push(prism(-w / 2, -d / 2, w, d, y, h));
+      y += h;
+      w *= rng.range(0.78, 0.91);
+      d *= rng.range(0.78, 0.91);
+    }
+    // Small corner yagura volumes create a castle compound rather than a lone
+    // pagoda tower.
+    const yagW = rng.range(1.8, 2.8);
+    [[-baseW / 2, -baseD / 2], [baseW / 2 - yagW, -baseD / 2],
+      [-baseW / 2, baseD / 2 - yagW], [baseW / 2 - yagW, baseD / 2 - yagW]].forEach(function (p) {
+      if (rng.chance(0.72)) prisms.push(prism(p[0], p[1], yagW, yagW, stoneH * 0.55,
+        cfg.floorHeight * rng.range(1.5, 2.8)));
+    });
+    return { kind: 'japaneseCastle', prisms: prisms };
   }
 
-  function recipeClassicalTemple(rng, cfg) {
+  function recipeDravidianTemple(rng, cfg) {
+    const w = rng.range(11, 16), d = rng.range(10, 15);
+    const plinth = cfg.floorHeight * rng.range(0.45, 0.75);
+    const hallW = w * rng.range(0.52, 0.7), hallD = d * rng.range(0.45, 0.62);
+    const shrineH = cfg.floorHeight * rng.range(2.2, 3.6);
+    const prisms = [
+      prism(-w / 2, -d / 2, w, d, 0, plinth),
+      prism(-hallW / 2, -hallD / 2, hallW, hallD, plinth, cfg.floorHeight * rng.range(1.2, 2)),
+      prism(-hallW * 0.34, -hallD * 0.3, hallW * 0.68, hallD * 0.6,
+        plinth + cfg.floorHeight * 1.5, shrineH),
+      // ceremonial entrance tower on the front axis
+      prism(-w * rng.range(0.12, 0.18), d / 2 - rng.range(1.1, 1.8),
+        w * rng.range(0.24, 0.36), rng.range(1.1, 1.8), 0,
+        cfg.floorHeight * rng.range(2.5, 4.5))
+    ];
+    return { kind: 'dravidianTemple', prisms: prisms };
+  }
+
+  function recipeEastAsianTemple(rng, cfg) {
+    const w = rng.range(13, 18), d = rng.range(11, 16);
+    const wall = rng.range(1.2, 2.1), hallH = cfg.floorHeight * rng.range(0.9, 1.5);
+    const gateW = w * rng.range(0.22, 0.34);
+    const sanctuaryW = w * rng.range(0.34, 0.5), sanctuaryD = d * rng.range(0.3, 0.46);
+    const prisms = [
+      prism(-w / 2, -d / 2, w, wall, 0, hallH),
+      prism(-w / 2, d / 2 - wall, w, wall, 0, hallH),
+      prism(-w / 2, -d / 2 + wall, wall, d - wall * 2, 0, hallH),
+      prism(w / 2 - wall, -d / 2 + wall, wall, d - wall * 2, 0, hallH),
+      prism(-gateW / 2, d / 2 - wall * 0.5, gateW, wall * 1.8, 0, hallH * rng.range(1.4, 2.1)),
+      prism(-sanctuaryW / 2, -sanctuaryD / 2, sanctuaryW, sanctuaryD, hallH,
+        cfg.floorHeight * rng.range(1.6, 2.7))
+    ];
+    return { kind: 'eastAsianTemple', prisms: prisms };
+  }
+
+  function recipeMesoTemple(rng, cfg) {
+    const w = rng.range(12, 18), d = rng.range(11, 16);
+    const steps = rng.int(3, 5), prisms = [];
+    let y = 0, cw = w, cd = d;
+    for (let i = 0; i < steps; i++) {
+      const h = cfg.floorHeight * rng.range(0.38, 0.62);
+      prisms.push(prism(-cw / 2, -cd / 2, cw, cd, y, h));
+      y += h;
+      cw *= rng.range(0.75, 0.86);
+      cd *= rng.range(0.75, 0.86);
+    }
+    const shrineW = cw * rng.range(0.72, 0.9), shrineD = cd * rng.range(0.62, 0.84);
+    prisms.push(prism(-shrineW / 2, -shrineD / 2, shrineW, shrineD, y,
+      cfg.floorHeight * rng.range(1.2, 2.2)));
+    return { kind: 'mesoTemple', prisms: prisms };
+  }
+
+  function recipePeristyleTemple(rng, cfg) {
     const w = rng.range(11, 17), d = rng.range(8, 12);
     const podium = cfg.floorHeight * rng.range(0.55, 0.9);
     const cellaH = cfg.floorHeight * rng.range(2.1, 3.5);
-    const cellaW = w * rng.range(0.5, 0.68), cellaD = d * rng.range(0.48, 0.68);
-    return { kind: 'classicalTemple', prisms: [
+    const cellaW = w * rng.range(0.46, 0.62), cellaD = d * rng.range(0.42, 0.62);
+    const porticoW = cellaW * rng.range(0.72, 0.96);
+    const porticoD = rng.range(1.2, 2.1);
+    return { kind: 'peristyleTemple', prisms: [
       prism(-w / 2, -d / 2, w, d, 0, podium),
-      prism(-cellaW / 2, -cellaD / 2, cellaW, cellaD, podium, cellaH)
+      prism(-cellaW / 2, -cellaD / 2, cellaW, cellaD, podium, cellaH),
+      prism(-porticoW / 2, cellaD / 2 - 0.15, porticoW, porticoD, podium, cellaH * rng.range(0.72, 0.92))
     ] };
+  }
+
+  function recipeSteppedTemple(rng, cfg) {
+    return recipeMesoTemple(rng, cfg);
+  }
+
+  function recipeClassicalTemple(rng, cfg) {
+    return recipePeristyleTemple(rng, cfg);
   }
 
   const RECIPES = {
@@ -249,6 +356,11 @@
     cluster: recipeCluster,
     longhouse: recipeLonghouse,
     castle: recipeCastle,
+    japaneseCastle: recipeJapaneseCastle,
+    dravidianTemple: recipeDravidianTemple,
+    eastAsianTemple: recipeEastAsianTemple,
+    mesoTemple: recipeMesoTemple,
+    peristyleTemple: recipePeristyleTemple,
     steppedTemple: recipeSteppedTemple,
     classicalTemple: recipeClassicalTemple
   };
@@ -284,7 +396,8 @@
   NS.makeFrame = makeFrame;
   NS.build = build;
   NS.recipeNames = ['slab', 'tower', 'lshape', 'cluster', 'longhouse',
-    'castle', 'steppedTemple', 'classicalTemple'];
+    'castle', 'japaneseCastle', 'dravidianTemple', 'eastAsianTemple',
+    'mesoTemple', 'peristyleTemple', 'steppedTemple', 'classicalTemple'];
 
   const root = typeof window !== 'undefined' ? window : globalThis;
   root.AD = root.AD || {};

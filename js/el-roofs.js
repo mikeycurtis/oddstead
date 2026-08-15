@@ -568,6 +568,38 @@
     S.strokePoly(ctx, pens.detail, c2, { lod: p.lod, width: 0.85 });
   }
 
+  // --- tiered pyramidal crown -----------------------------------------------
+  // A stacked, shrinking roof body used for South Asian shikhara/gopuram-like
+  // crowns and other stepped sacred silhouettes. Unlike a flat parapet, each
+  // tier has four sloped faces and a visible shoulder line.
+  function roofTieredPyramid(ctx, R, pens, rng, p) {
+    const b = box(R), h = R.roof.h;
+    const steps = Math.max(3, Math.min(6, R.roof.steps || 4));
+    let x0 = b.x0, x1 = b.x1, z0 = b.z0, z1 = b.z1, y0 = b.y;
+    for (let k = 0; k < steps; k++) {
+      const frac = k === steps - 1 ? 0.22 : 0.15 + (k % 2) * 0.04;
+      const insetX = (x1 - x0) * frac, insetZ = (z1 - z0) * frac;
+      const nx0 = x0 + insetX, nx1 = x1 - insetX;
+      const nz0 = z0 + insetZ, nz1 = z1 - insetZ;
+      const y1 = y0 + h / steps;
+      const low = [G.v3(x0, y0, z1), G.v3(x1, y0, z1), G.v3(x1, y0, z0), G.v3(x0, y0, z0)];
+      const high = [G.v3(nx0, y1, nz1), G.v3(nx1, y1, nz1), G.v3(nx1, y1, nz0), G.v3(nx0, y1, nz0)];
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) % 4;
+        const face = [low[i], low[j], high[j], high[i]];
+        if (!visiblePlane(R, face[0], face[1], face[2])) continue;
+        const q = proj(R, face);
+        opaquePoly(ctx, R, q);
+        accentPoly(ctx, q, R.roof.accent, rng);
+        slopeHatch(ctx, pens, q, rng, p, R.roof.seamGap * 0.8);
+        S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: 0.82 });
+      }
+      const cap = proj(R, high);
+      S.strokePoly(ctx, pens.outline, cap, { lod: p.lod, width: 0.92 });
+      x0 = nx0; x1 = nx1; z0 = nz0; z1 = nz1; y0 = y1;
+    }
+  }
+
   // --- stepped / ornamented parapet ----------------------------------------
   // Flat roof crowned by two or three inset blocks — the setback silhouette,
   // with shallow fluting on the faces that read.
@@ -725,6 +757,7 @@
     barrel: roofBarrel,
     broadEave: roofBroadEave,
     pantile: roofPantile,
+    tieredPyramid: roofTieredPyramid,
     steppedParapet: roofStepped,
     steepGable: roofSteepGable,
     crenellated: roofCrenellated,
@@ -732,7 +765,7 @@
     pediment: roofPediment
   };
   NS.roofNames = ['flat', 'gabled', 'hipped', 'shed', 'barrel',
-    'broadEave', 'pantile', 'steppedParapet', 'steepGable', 'crenellated',
+    'broadEave', 'pantile', 'tieredPyramid', 'steppedParapet', 'steepGable', 'crenellated',
     'sweptEave', 'pediment'];
 
   /** roofHeight — how far the roof rises above its prism, used for fit-to-rect. */
@@ -746,6 +779,7 @@
       case 'barrel': return small * rng.range(0.3, 0.46);
       case 'broadEave': return small * rng.range(0.22, 0.34);
       case 'pantile': return small * rng.range(0.28, 0.44);
+      case 'tieredPyramid': return small * rng.range(0.42, 0.72);
       case 'steppedParapet': return rng.range(1.1, 2.4);
       case 'steepGable': return small * rng.range(0.55, 0.85);
       case 'crenellated': return rng.range(0.8, 1.5);
