@@ -219,10 +219,37 @@
 
     const roofRng = master.fork('roofs');
     const mainRoof = roofRng.weightedKey(cfgMood.roofs);
-    const roofs = mass.prisms.map(function (pr) {
-      if (pr.capped) return { variant: null };
+    const coveredByUpperMass = function (pr, i) {
+      const top = pr.y0 + pr.h;
+      return mass.prisms.some(function (q, j) {
+        if (i === j || q.capped) return false;
+        const startsAbove = q.y0 >= top - 0.08;
+        const enclosesFromSameLevel = q.y0 <= pr.y0 + 0.08 && q.y0 + q.h > top + 0.08;
+        const ox = Math.min(pr.x + pr.w, q.x + q.w) - Math.max(pr.x, q.x);
+        const oz = Math.min(pr.z + pr.d, q.z + q.d) - Math.max(pr.z, q.z);
+        const coversFootprint = ox > Math.min(pr.w, q.w) * 0.65 && oz > Math.min(pr.d, q.d) * 0.65;
+        return (startsAbove || enclosesFromSameLevel) && coversFootprint;
+      });
+    };
+    const domeNames = { dome: true, ribbedDome: true, onionDome: true };
+    const nonDomeWeights = {};
+    Object.keys(cfgMood.roofs).forEach(function (name) {
+      if (!domeNames[name]) nonDomeWeights[name] = cfgMood.roofs[name];
+    });
+    const pickNonDome = function () {
+      return Object.keys(nonDomeWeights).length ? roofRng.weightedKey(nonDomeWeights) : 'flat';
+    };
+    let primaryDomeIndex = -1, primaryDomeTop = -Infinity;
+    mass.prisms.forEach(function (pr, i) {
+      if (pr.capped || coveredByUpperMass(pr, i)) return;
+      const top = pr.y0 + pr.h;
+      if (top > primaryDomeTop) { primaryDomeTop = top; primaryDomeIndex = i; }
+    });
+    const roofs = mass.prisms.map(function (pr, prismIndex) {
+      if (pr.capped || coveredByUpperMass(pr, prismIndex)) return { variant: null };
       let variant = roofRng.chance(0.3) ? roofRng.weightedKey(cfgMood.roofs) : mainRoof;
       if (!AD.roofs.roofs[variant]) variant = 'flat';
+      if (domeNames[variant] && prismIndex !== primaryDomeIndex) variant = pickNonDome();
       const long = pr.d > pr.w;
       const flatTop = variant === 'flat' || variant === 'steppedParapet' ||
         variant === 'crenellated';
