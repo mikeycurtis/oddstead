@@ -35,6 +35,7 @@
 
   // --- helpers --------------------------------------------------------------
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function wrapYaw(v) { return ((v + 180) % 360 + 360) % 360 - 180; }
 
   function sanitizeState() {
     if (!state.seed) state.seed = AD.rng.freshSeed();
@@ -351,7 +352,37 @@
       render();
     });
 
-    canvas.addEventListener('click', function () { regenerate(); });
+    let drag = null;
+    let suppressClick = false;
+    canvas.addEventListener('pointerdown', function (e) {
+      if (e.button != null && e.button !== 0) return;
+      drag = { id: e.pointerId, x: e.clientX, startX: e.clientX, moved: false, yaw: state.yaw };
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      canvas.classList.add('is-dragging');
+    });
+    canvas.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.startX;
+      if (Math.abs(dx) > 4) drag.moved = true;
+      if (!drag.moved) return;
+      state.yaw = wrapYaw(drag.yaw + dx * 0.55);
+      el.yaw.value = String(state.yaw);
+      el.yawOut.textContent = Math.round(state.yaw) + '°';
+      render();
+    });
+    function endDrag(e) {
+      if (!drag || (e.pointerId != null && e.pointerId !== drag.id)) return;
+      suppressClick = drag.moved;
+      try { canvas.releasePointerCapture(drag.id); } catch (_) {}
+      drag = null;
+      canvas.classList.remove('is-dragging');
+    }
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
+    canvas.addEventListener('click', function (e) {
+      if (suppressClick) { suppressClick = false; e.preventDefault(); return; }
+      regenerate();
+    });
 
     document.addEventListener('keydown', function (e) {
       const t = e.target;
