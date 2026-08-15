@@ -275,11 +275,15 @@
       const count = Math.min(strokes.length, Math.max(0, Math.floor(raw * strokes.length)));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       AD.paper.base(ctx, cssW, cssH, AD.rng.makeRng(state.seed + ':animation-paper'));
-      // Keep colored fills and paper-backed walls as a faint underdrawing; all ink is replayed below.
-      ctx.save();
-      ctx.globalAlpha = 0.055;
-      ctx.drawImage(off, 0, 0, off.width, off.height, 0, 0, cssW, cssH);
-      ctx.restore();
+      // Keep final color fills and paper-backed walls hidden until the ink is mostly complete.
+      // This makes the line-by-line construction unmistakable instead of looking like a fade.
+      const ghostAlpha = raw > 0.86 ? ((raw - 0.86) / 0.14) * 0.055 : 0;
+      if (ghostAlpha > 0) {
+        ctx.save();
+        ctx.globalAlpha = ghostAlpha;
+        ctx.drawImage(off, 0, 0, off.width, off.height, 0, 0, cssW, cssH);
+        ctx.restore();
+      }
       for (let i = 0; i < count; i++) drawCapturedStroke(strokes[i]);
 
       if (raw < 1 && animationId !== 0) {
