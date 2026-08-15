@@ -11,6 +11,7 @@
   const ST = AD.style;
 
   const GRIDS = { 4: [2, 2], 12: [3, 4], 24: [4, 6], 48: [6, 8] };
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   NS.counts = [4, 12, 24, 48];
 
   function grid(count) {
@@ -84,10 +85,15 @@
       density: opts.density == null ? 1 : opts.density,
       view: opts.view || { yaw: 22, pitch: 16 },
       w: opts.w, h: opts.h,
+      focusIndex: opts.focusIndex == null ? null : +opts.focusIndex,
+      focusProgress: clamp(opts.focusProgress == null ? (opts.focusIndex == null ? 0 : 1) : opts.focusProgress, 0, 1),
       showCaptions: opts.showCaptions !== false
     };
     const lod = lodFor(count);
+    ctx.save();
+    ctx.globalAlpha = 1 - o.focusProgress;
     drawHeader(ctx, o, o.seed);
+    ctx.restore();
 
     let i = 0;
     const job = {
@@ -111,7 +117,19 @@
 
   function drawCell(ctx, o, i, lod) {
     const seed = cellSeed(o.seed, i);
-    const rect = cellRect(o, i);
+    const baseRect = cellRect(o, i);
+    const p = o.focusProgress;
+    const focused = o.focusIndex != null;
+    const isFocus = focused && i === o.focusIndex;
+    const targetRect = { x: o.w * 0.06, y: o.h * 0.09, w: o.w * 0.88, h: o.h * 0.78, pad: 0.09 };
+    const rect = isFocus ? {
+      x: baseRect.x + (targetRect.x - baseRect.x) * p,
+      y: baseRect.y + (targetRect.y - baseRect.y) * p,
+      w: baseRect.w + (targetRect.w - baseRect.w) * p,
+      h: baseRect.h + (targetRect.h - baseRect.h) * p,
+      pad: baseRect.pad
+    } : baseRect;
+    const opacity = focused && !isFocus ? 1 - p : 1;
     const jitter = AD.rng.makeRng(seed + ':view');
     // per-cell yaw variation so the plate reads as varied studies, not a stamp
     const view = {
@@ -119,6 +137,8 @@
       pitch: Math.max(2, Math.min(38, o.view.pitch + jitter.range(-6, 9))),
       opaqueWalls: !!o.view.opaqueWalls
     };
+    ctx.save();
+    ctx.globalAlpha *= opacity;
     let plan = null;
     S.setCaptureGroup(i);
     try {
@@ -144,6 +164,7 @@
       ctx.restore();
     }
     S.setCaptureGroup(null);
+    ctx.restore();
   }
 
   NS.create = create;

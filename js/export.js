@@ -16,7 +16,8 @@
     pitch: 'number',
     density: 'number',
     count: 'number',
-    opaqueWalls: 'boolean'
+    opaqueWalls: 'boolean',
+    focus: 'number'
   };
 
   function readState(defaults) {

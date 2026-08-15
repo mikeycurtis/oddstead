@@ -18,7 +18,8 @@
     pitch: 16,
     density: 1,
     count: 24,
-    opaqueWalls: false
+    opaqueWalls: false,
+    focus: null
   };
 
   const ASPECT = { single: 0.8, plate: 0.72 };
@@ -30,6 +31,7 @@
   let plan = null;
   let job = null, rafId = null;
   let animationId = 0;
+  let focusRafId = 0;
   let statusTimer = null;
   let debug = false;
   const el = {};
@@ -48,6 +50,7 @@
     state.density = clamp(isFinite(state.density) ? state.density : 1, 0.4, 1.6);
     state.count = AD.plate.counts.indexOf(+state.count) >= 0 ? +state.count : 24;
     state.opaqueWalls = state.opaqueWalls === true || state.opaqueWalls === 'true' || state.opaqueWalls === 1;
+    state.focus = state.mode === 'plate' && state.focus !== null && state.focus !== '' && Number.isInteger(+state.focus) && +state.focus >= 0 && +state.focus < state.count ? +state.focus : null;
   }
 
   function status(msg, sticky) {
@@ -172,6 +175,8 @@
     AD.exporter.writeState(state);
     layoutCanvas();
 
+    const focusIndex = options && Object.prototype.hasOwnProperty.call(options, 'focusIndex') ? options.focusIndex : state.focus;
+    const focusProgress = options && Object.prototype.hasOwnProperty.call(options, 'focusProgress') ? options.focusProgress : (state.focus == null ? 0 : 1);
     const t0 = now();
     try {
       beginFrame(ctx, cssW, cssH, dpr);
@@ -187,6 +192,7 @@
         job = AD.plate.create(ctx, {
           seed: state.seed, count: state.count, mood: state.mood,
           density: state.density, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
+          focusIndex: focusIndex, focusProgress: focusProgress,
           w: cssW, h: cssH
         });
         if (immediate) {
@@ -236,6 +242,7 @@
       AD.plate.create(c, {
         seed: state.seed, count: state.count, mood: state.mood,
         density: state.density, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
+        focusIndex: state.focus, focusProgress: state.focus == null ? 0 : 1,
         w: lw, h: lh
       }).finish();
     }
@@ -440,14 +447,17 @@
 
     el.mode.addEventListener('change', function () {
       state.mode = el.mode.value === 'plate' ? 'plate' : 'single';
+      state.focus = null;
       render();
     });
     el.count.addEventListener('change', function () {
       state.count = +el.count.value;
+      state.focus = null;
       render();
     });
     el.mood.addEventListener('change', function () {
       state.mood = el.mood.value;
+      state.focus = null;
       plan = null;
       render();
     });
@@ -471,6 +481,51 @@
       state.opaqueWalls = el.opaqueWalls.checked;
       render();
     });
+
+    function plateCellAt(e) {
+      const box = canvas.getBoundingClientRect();
+      const x = (e.clientX - box.left) * cssW / box.width;
+      const y = (e.clientY - box.top) * cssH / box.height;
+      for (let i = 0; i < state.count; i++) {
+        const r = AD.plate.cellRect({ count: state.count, w: cssW, h: cssH }, i);
+        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return i;
+      }
+      return null;
+    }
+
+    function animatePlateFocus(target) {
+      if (focusRafId) cancelAnimationFrame(focusRafId);
+      const opening = target != null;
+      const focusIndex = opening ? target : state.focus;
+      const from = opening ? 0 : 1;
+      const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const duration = 620;
+      state.focus = target;
+      function step(t) {
+        const raw = Math.max(0, Math.min(1, ((t == null ? Date.now() : t) - started) / duration));
+        const smooth = raw * raw * (3 - 2 * raw);
+        const progress = from + (opening ? 1 : -1) * smooth;
+        render({ immediate: true, focusIndex: focusIndex, focusProgress: progress });
+        if (raw < 1) focusRafId = requestAnimationFrame(step);
+        else {
+          focusRafId = 0;
+          state.focus = target;
+          render({ immediate: true });
+        }
+      }
+      focusRafId = requestAnimationFrame(step);
+    }
+
+    function handleCanvasClick(e) {
+      if (state.mode === 'plate') {
+        const target = state.focus == null ? plateCellAt(e) : null;
+        if (target != null || state.focus != null) {
+          animatePlateFocus(target);
+          return;
+        }
+      }
+      regenerate();
+    }
 
     let drag = null;
     let suppressClick = false;
@@ -505,7 +560,7 @@
     canvas.addEventListener('pointercancel', endDrag);
     canvas.addEventListener('click', function (e) {
       if (suppressClick) { suppressClick = false; e.preventDefault(); return; }
-      regenerate();
+      handleCanvasClick(e);
     });
 
     document.addEventListener('keydown', function (e) {
