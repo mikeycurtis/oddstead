@@ -26,7 +26,9 @@
   }
 
   function opaquePoly(ctx, R, pts2d) {
-    if (!R.opaqueWalls || !pts2d || pts2d.length < 3) return;
+    if (!pts2d || pts2d.length < 3) return;
+    // Roof surfaces are solid paper in every mode; opaque mode also makes them
+    // match the wall backing contract exactly rather than exposing rear ink.
     S.polyFill(ctx, pts2d, AD.style.paper.base, 1);
   }
 
