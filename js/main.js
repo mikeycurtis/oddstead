@@ -356,18 +356,22 @@
     let suppressClick = false;
     canvas.addEventListener('pointerdown', function (e) {
       if (e.button != null && e.button !== 0) return;
-      drag = { id: e.pointerId, x: e.clientX, startX: e.clientX, moved: false, yaw: state.yaw };
+      drag = { id: e.pointerId, x: e.clientX, startX: e.clientX, startY: e.clientY, moved: false, yaw: state.yaw, pitch: state.pitch };
       try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
       canvas.classList.add('is-dragging');
     });
     canvas.addEventListener('pointermove', function (e) {
       if (!drag || e.pointerId !== drag.id) return;
       const dx = e.clientX - drag.startX;
-      if (Math.abs(dx) > 4) drag.moved = true;
+      const dy = e.clientY - drag.startY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.moved = true;
       if (!drag.moved) return;
-      state.yaw = wrapYaw(drag.yaw + dx * 0.55);
+      state.yaw = wrapYaw(drag.yaw - dx * 0.55);
+      state.pitch = clamp(drag.pitch - dy * 0.24, 2, 38);
       el.yaw.value = String(state.yaw);
+      el.pitch.value = String(state.pitch);
       el.yawOut.textContent = Math.round(state.yaw) + '°';
+      el.pitchOut.textContent = Math.round(state.pitch) + '°';
       render();
     });
     function endDrag(e) {
