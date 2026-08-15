@@ -127,13 +127,15 @@
   }
 
   function beginFrame(c, w, h, scale) {
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, c.canvas.width, c.canvas.height);
     c.setTransform(scale, 0, 0, scale, 0, 0);
     AD.paper.base(c, w, h, AD.rng.makeRng(state.seed + ':paper'));
   }
 
   function endFrame(c, w, h, scale) {
     c.setTransform(1, 0, 0, 1, 0, 0);
-    AD.paper.overlay(c, w * scale, h * scale, scale);
+    if (!(state.mode === 'plate' && state.focus != null)) AD.paper.overlay(c, w * scale, h * scale, scale);
   }
 
   /** Keep the canvas's accessible name describing what is actually drawn. */
@@ -304,6 +306,8 @@
       const count = Math.min(maxGroupStrokes, Math.max(0, Math.floor(raw * maxGroupStrokes)));
       let drawn = 0;
       let currentTip = null;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       AD.paper.base(ctx, cssW, cssH, AD.rng.makeRng(state.seed + ':animation-paper'));
       // Keep final color fills and paper-backed walls hidden until the ink is mostly complete.

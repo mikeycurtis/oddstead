@@ -130,6 +130,7 @@
       pad: baseRect.pad
     } : baseRect;
     const opacity = focused && !isFocus ? 1 - p : 1;
+    if (focused && !isFocus) return;
     const jitter = AD.rng.makeRng(seed + ':view');
     // per-cell yaw variation so the plate reads as varied studies, not a stamp
     const view = {
