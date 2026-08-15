@@ -245,42 +245,45 @@
     off.height = Math.round(cssH * dpr);
     const oc = off.getContext('2d');
     if (!oc) return;
+    const strokes = [];
+    AD.stroke.beginCapture(strokes);
     drawForExport(oc, off.width, off.height, dpr);
+    AD.stroke.endCapture();
+
+    function drawCapturedStroke(stroke) {
+      if (!stroke || stroke.left.length < 2) return;
+      ctx.save();
+      ctx.globalAlpha = stroke.alpha;
+      ctx.fillStyle = stroke.color;
+      ctx.beginPath();
+      ctx.moveTo(stroke.left[0].x, stroke.left[0].y);
+      for (let i = 1; i < stroke.left.length; i++) ctx.lineTo(stroke.left[i].x, stroke.left[i].y);
+      for (let i = stroke.right.length - 1; i >= 0; i--) ctx.lineTo(stroke.right[i].x, stroke.right[i].y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
 
     const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    const duration = state.mode === 'plate' ? 3100 : 2600;
+    const duration = Math.max(2600, Math.min(7000, strokes.length * 8));
     el.animate.textContent = 'Stop animation';
-    status('drawing…', true);
+    status('drawing 0/' + strokes.length + '…', true);
 
     function frame(nowTime) {
       const nowValue = nowTime == null ? Date.now() : nowTime;
       const raw = Math.max(0, Math.min(1, (nowValue - started) / duration));
-      const eased = raw < 0.78 ? (raw / 0.78) * (raw / 0.78) * (3 - 2 * (raw / 0.78)) * 0.9 : 0.9 + (raw - 0.78) / 0.22 * 0.1;
+      const count = Math.min(strokes.length, Math.max(0, Math.floor(raw * strokes.length)));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       AD.paper.base(ctx, cssW, cssH, AD.rng.makeRng(state.seed + ':animation-paper'));
+      // Keep colored fills and paper-backed walls as a faint underdrawing; all ink is replayed below.
       ctx.save();
-      const revealY = cssH * (1.02 - eased * 1.12);
-      ctx.beginPath();
-      ctx.rect(0, revealY, cssW, cssH - revealY + 2);
-      ctx.clip();
+      ctx.globalAlpha = 0.055;
       ctx.drawImage(off, 0, 0, off.width, off.height, 0, 0, cssW, cssH);
       ctx.restore();
-
-      // A slightly wandering nib line sells the reveal as a hand moving across paper.
-      const nibY = revealY + Math.sin(raw * Math.PI * 11) * 2.2;
-      ctx.save();
-      ctx.strokeStyle = 'rgba(35,38,48,0.62)';
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.moveTo(cssW * 0.07, nibY);
-      for (let x = cssW * 0.07; x <= cssW * 0.93; x += 18) {
-        ctx.lineTo(x, nibY + Math.sin(x * 0.045 + raw * 18) * 1.5);
-      }
-      ctx.stroke();
-      ctx.restore();
+      for (let i = 0; i < count; i++) drawCapturedStroke(strokes[i]);
 
       if (raw < 1 && animationId !== 0) {
-        status('drawing ' + Math.round(raw * 100) + '%…', true);
+        status('drawing ' + count + '/' + strokes.length + '…', true);
         animationId = requestAnimationFrame(frame);
       } else {
         ctx.setTransform(1, 0, 0, 1, 0, 0);

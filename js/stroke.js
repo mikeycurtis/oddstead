@@ -7,6 +7,7 @@
 (function () {
   'use strict';
   const NS = {};
+  let captureTarget = null;
 
   const MAX_SAMPLES = 400;
   const MAX_HATCH = 34;
@@ -172,7 +173,18 @@
       ctx.stroke();
     }
     ctx.restore();
+    if (captureTarget) {
+      captureTarget.push({
+        left: L.map(function (p) { return { x: p.x, y: p.y }; }),
+        right: R.map(function (p) { return { x: p.x, y: p.y }; }),
+        color: opts.color || pen.color,
+        alpha: opts.alpha == null ? 1 : opts.alpha
+      });
+    }
   }
+
+  function beginCapture(target) { captureTarget = target || []; return captureTarget; }
+  function endCapture() { const out = captureTarget; captureTarget = null; return out || []; }
 
   function strokeLine(ctx, pen, a, b, opts) {
     strokePath(ctx, pen, [a, b], opts);
@@ -381,6 +393,8 @@
   NS.makePen = makePen;
   NS.makePens = makePens;
   NS.strokePath = strokePath;
+  NS.beginCapture = beginCapture;
+  NS.endCapture = endCapture;
   NS.strokeLine = strokeLine;
   NS.strokePoly = strokePoly;
   NS.strokeEllipse = strokeEllipse;
