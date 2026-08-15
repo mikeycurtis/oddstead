@@ -15,7 +15,8 @@
     yaw: 'number',
     pitch: 'number',
     density: 'number',
-    count: 'number'
+    count: 'number',
+    opaqueWalls: 'boolean'
   };
 
   function readState(defaults) {
@@ -35,6 +36,8 @@
       if (FIELDS[k] === 'number') {
         const v = parseFloat(raw);
         if (isFinite(v)) out[k] = v;
+      } else if (FIELDS[k] === 'boolean') {
+        out[k] = raw === '1' || raw === 'true' || raw === 'on';
       } else {
         out[k] = String(raw).slice(0, 64);
       }

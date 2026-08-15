@@ -17,7 +17,8 @@
     yaw: 24,
     pitch: 16,
     density: 1,
-    count: 24
+    count: 24,
+    opaqueWalls: false
   };
 
   const ASPECT = { single: 0.8, plate: 0.72 };
@@ -44,6 +45,7 @@
     state.pitch = clamp(isFinite(state.pitch) ? state.pitch : 16, 2, 38);
     state.density = clamp(isFinite(state.density) ? state.density : 1, 0.4, 1.6);
     state.count = AD.plate.counts.indexOf(+state.count) >= 0 ? +state.count : 24;
+    state.opaqueWalls = state.opaqueWalls === true || state.opaqueWalls === 'true' || state.opaqueWalls === 1;
   }
 
   function status(msg, sticky) {
@@ -165,7 +167,7 @@
       beginFrame(ctx, cssW, cssH, dpr);
       if (state.mode === 'single') {
         const p = ensurePlan();
-        inkSingle(ctx, cssW, cssH, p, { yaw: state.yaw, pitch: state.pitch });
+        inkSingle(ctx, cssW, cssH, p, { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls });
         endFrame(ctx, cssW, cssH, dpr);
         if (debug) console.log('[antitecture] render', (now() - t0).toFixed(1) + 'ms');
         updateA11y();
@@ -174,7 +176,7 @@
         // progressive: the plate visibly inks itself, cell by cell
         job = AD.plate.create(ctx, {
           seed: state.seed, count: state.count, mood: state.mood,
-          density: state.density, view: { yaw: state.yaw, pitch: state.pitch },
+          density: state.density, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
           w: cssW, h: cssH
         });
         status('inking 0/' + job.total + '…', true);
@@ -209,11 +211,11 @@
     const lw = w / scale, lh = h / scale;
     beginFrame(c, lw, lh, scale);
     if (state.mode === 'single') {
-      inkSingle(c, lw, lh, ensurePlan(), { yaw: state.yaw, pitch: state.pitch });
+      inkSingle(c, lw, lh, ensurePlan(), { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls });
     } else {
       AD.plate.create(c, {
         seed: state.seed, count: state.count, mood: state.mood,
-        density: state.density, view: { yaw: state.yaw, pitch: state.pitch },
+        density: state.density, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
         w: lw, h: lh
       }).finish();
     }
@@ -278,6 +280,7 @@
     el.yaw.value = String(state.yaw);
     el.pitch.value = String(state.pitch);
     el.density.value = String(state.density);
+    el.opaqueWalls.checked = state.opaqueWalls;
     el.yawOut.textContent = Math.round(state.yaw) + '°';
     el.pitchOut.textContent = Math.round(state.pitch) + '°';
     el.densityOut.textContent = Number(state.density).toFixed(1) + '×';
@@ -302,6 +305,7 @@
     el.yawOut = document.getElementById('yaw-out');
     el.pitchOut = document.getElementById('pitch-out');
     el.densityOut = document.getElementById('density-out');
+    el.opaqueWalls = document.getElementById('opaque-walls');
     el.status = document.getElementById('status');
 
     el.random.addEventListener('click', function () { regenerate(); });
@@ -340,6 +344,10 @@
       state.density = +el.density.value;
       el.densityOut.textContent = Number(state.density).toFixed(1) + '×';
       plan = null;
+      render();
+    });
+    el.opaqueWalls.addEventListener('change', function () {
+      state.opaqueWalls = el.opaqueWalls.checked;
       render();
     });
 

@@ -496,6 +496,20 @@
       flora: plan.flora
     };
 
+    if (R.opaqueWalls) {
+      const q = frame.quad(0, 0, 1, 1);
+      if (q && q.length === 4) {
+        ctx.save();
+        ctx.fillStyle = AD.style.paper.base;
+        ctx.beginPath();
+        ctx.moveTo(q[0].x, q[0].y);
+        for (let qi = 1; qi < q.length; qi++) ctx.lineTo(q[qi].x, q[qi].y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
     // shaded side: hatch the whole wall first, then cut the openings into it
     if (cfg.shadow && lod >= 0.45 && cfg.system !== 'solid') {
       S.hatchQuad(ctx, pens.hatch, frame.quad(0.01, 0.005, 0.99, 0.995), {
@@ -552,6 +566,7 @@
     const P = function (x, y, z) { return G.project({ x: x, y: y, z: z }, cam); };
     const R = {
       P: P, cam: cam, pxPerUnit: cam.scale,
+      opaqueWalls: !!view.opaqueWalls,
       facesOf: plan.mass.prisms.map(function (pr) { return M.prismFaces(pr); })
     };
     const palette = plan.accents;

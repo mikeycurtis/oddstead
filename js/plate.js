@@ -116,7 +116,8 @@
     // per-cell yaw variation so the plate reads as varied studies, not a stamp
     const view = {
       yaw: Math.max(-180, Math.min(180, o.view.yaw + jitter.range(-26, 26))),
-      pitch: Math.max(2, Math.min(38, o.view.pitch + jitter.range(-6, 9)))
+      pitch: Math.max(2, Math.min(38, o.view.pitch + jitter.range(-6, 9))),
+      opaqueWalls: !!o.view.opaqueWalls
     };
     let plan = null;
     try {
