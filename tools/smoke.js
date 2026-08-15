@@ -216,8 +216,13 @@ console.log('single-building generation (120 seeds × moods × angles)');
 console.log('mood families');
 {
   const names = AD.style.moodNames;
-  if (names.length < 9) fail('only ' + names.length + ' mood families (need 9)');
+  if (names.length < 12) fail('only ' + names.length + ' mood families (need 12)');
   else ok(names.length + ' families: ' + names.join(', '));
+
+  // the families this extension added must all be present and labelled
+  ['chinese', 'european', 'greek', 'japanese'].forEach(function (m) {
+    if (names.indexOf(m) < 0) fail('mood family "' + m + '" missing from moodNames');
+  });
 
   // Every weight table must name variants that actually exist, or a mood will
   // silently fall back to the default and its identity disappears.
@@ -270,6 +275,150 @@ console.log('mood families');
   });
   if (wrong) fail(wrong + ' generations ignored the requested mood');
   else ok('each family is selectable on its own');
+}
+
+console.log('planting palette');
+{
+  const HEX = /^#[0-9a-f]{6}$/i;
+  if (typeof AD.style.plantColor !== 'function') {
+    fail('AD.style.plantColor is missing');
+  } else {
+    let badCol = 0;
+    AD.style.moodNames.forEach(function (m) {
+      AD.site.treeNames.concat(['windowBox', 'vine', 'grass']).forEach(function (sp) {
+        const c = AD.style.plantColor(AD.rng.makeRng('pal:' + m + ':' + sp), m, sp);
+        ['leaf', 'deep', 'pale', 'bark'].forEach(function (k) {
+          if (!HEX.test(String(c[k]))) {
+            fail(m + '/' + sp + ' produced a bad ' + k + ': ' + c[k]); badCol++;
+          }
+        });
+        if (c.bloom !== null && !HEX.test(String(c.bloom))) {
+          fail(m + '/' + sp + ' produced a bad bloom: ' + c.bloom); badCol++;
+        }
+      });
+    });
+    // an unknown species must still come back with a usable palette
+    const fallback = AD.style.plantColor(AD.rng.makeRng('x'), 'nosuchmood', 'nosuchplant');
+    if (!HEX.test(String(fallback.leaf))) { fail('plantColor has no fallback path'); badCol++; }
+    if (!badCol) ok('every family × species yields a valid palette (plus fallbacks)');
+
+    const a = AD.style.plantColor(AD.rng.makeRng('same'), 'chinese', 'willow');
+    const b = AD.style.plantColor(AD.rng.makeRng('same'), 'chinese', 'willow');
+    if (JSON.stringify(a) !== JSON.stringify(b)) fail('plantColor is not deterministic');
+    else ok('same stream → same planting colours');
+  }
+
+  // colour must stay a wash under the ink, never a covering
+  const fa = AD.style.floraAlpha;
+  const loud = Object.keys(fa).filter(function (k) { return fa[k] > 0.42; });
+  if (loud.length) fail('flora alpha too opaque: ' + loud.join(', '));
+  else ok('all planting fills stay translucent (max alpha ' +
+    Math.max.apply(null, Object.keys(fa).map(function (k) { return fa[k]; })) + ')');
+
+  // the plan must actually carry colour to every planted thing
+  let missing = 0, leafSet = {};
+  for (let i = 0; i < 160; i++) {
+    const mood = AD.style.moodNames[i % AD.style.moodNames.length];
+    const plan = AD.building.generate('flora' + i, { mood: mood, density: 1.3 });
+    if (!plan.flora || !HEX.test(String(plan.flora.leaf))) { missing++; continue; }
+    leafSet[plan.flora.leaf] = true;
+    plan.site.trees.forEach(function (t) {
+      if (!t.col || !HEX.test(String(t.col.leaf))) missing++;
+      else leafSet[t.col.leaf] = true;
+    });
+    plan.site.planters.forEach(function (b) { if (!b.col) missing++; });
+    plan.site.planting.forEach(function (g) { if (!g.col) missing++; });
+  }
+  if (missing) fail(missing + ' planted items reached render without a palette');
+  else ok('every tree, planter and tuft carries its own colours');
+  const distinct = Object.keys(leafSet).length;
+  if (distinct < 6) fail('only ' + distinct + ' distinct greens across all families');
+  else ok(distinct + ' distinct greens in play across the families');
+
+  // a family's planting should read differently from another's
+  const leavesOf = function (mood) {
+    const seen = {};
+    for (let i = 0; i < 40; i++) {
+      const plan = AD.building.generate('cmp' + i, { mood: mood, density: 1.4 });
+      plan.site.trees.forEach(function (t) { seen[t.col.leaf] = true; });
+    }
+    return Object.keys(seen);
+  };
+  const greekLeaves = leavesOf('greek');
+  const japaneseLeaves = leavesOf('japanese');
+  const shared = greekLeaves.filter(function (c) { return japaneseLeaves.indexOf(c) >= 0; });
+  if (!greekLeaves.length || !japaneseLeaves.length) {
+    fail('a family produced no planting at all');
+  } else if (shared.length === greekLeaves.length && shared.length === japaneseLeaves.length) {
+    fail('Greek and Japanese planting use identical palettes');
+  } else {
+    ok('family palettes diverge (greek ' + greekLeaves.length + ', japanese ' +
+      japaneseLeaves.length + ', shared ' + shared.length + ')');
+  }
+}
+
+console.log('new style families');
+{
+  // Each new family must actually reach its own signature variants, not fall
+  // back to the defaults — that is the difference between a family and a label.
+  const WANT = {
+    chinese: { roofs: 'sweptEave', facades: 'latticeBay', windows: 'iceRay', doors: 'moonGate' },
+    european: { facades: 'stuccoBays', windows: 'casement', gear: 'dovecote' },
+    greek: { roofs: 'pediment', facades: 'colonnade', windows: 'trabeated', doors: 'pedimentDoor' },
+    japanese: { roofs: 'broadEave', facades: 'veranda', windows: 'lattice' }
+  };
+  Object.keys(WANT).forEach(function (mood) {
+    const hit = { roofs: false, facades: false, windows: false, doors: false, gear: false };
+    for (let i = 0; i < 90; i++) {
+      const plan = AD.building.generate('sig-' + mood + i, { mood: mood, density: 1.3 });
+      plan.roofs.forEach(function (r) { if (r.variant === WANT[mood].roofs) hit.roofs = true; });
+      Object.keys(plan.faces).forEach(function (k) {
+        const f = plan.faces[k];
+        if (f.system === WANT[mood].facades) hit.facades = true;
+        if (f.win === WANT[mood].windows) hit.windows = true;
+        if (f.hasDoor && f.door === WANT[mood].doors) hit.doors = true;
+      });
+      plan.gear.forEach(function (g) { if (g.type === WANT[mood].gear) hit.gear = true; });
+    }
+    const want = WANT[mood];
+    const missed = Object.keys(want).filter(function (fam) { return !hit[fam]; });
+    if (missed.length) {
+      fail(mood + ' never produced its signature ' +
+        missed.map(function (f) { return f + ':' + want[f]; }).join(', '));
+    } else {
+      ok(mood + ' reaches its own ' + Object.keys(want).map(function (f) {
+        return want[f];
+      }).join(', '));
+    }
+  });
+
+  // and each of them has to survive the whole camera and detail range, at both
+  // single-sheet and plate levels of detail
+  let stressBad = 0, stressN = 0;
+  ['chinese', 'european', 'greek', 'japanese'].forEach(function (mood) {
+    for (let i = 0; i < 40; i++) {
+      const view = { yaw: -60 + (i * 13) % 121, pitch: 2 + (i * 7) % 37 };
+      const lod = [1, 0.5, 0.35][i % 3];
+      const density = 0.4 + ((i % 7) / 6) * 1.2;
+      let res;
+      try {
+        res = renderOnce('stress-' + mood + i, { mood: mood, density: density }, view,
+          RECT, lod);
+      } catch (err) {
+        fail(mood + ' seed ' + i + ' threw: ' + err.stack.split('\n')[0]);
+        stressBad++; continue;
+      }
+      stressN++;
+      if (res.ctx._bad.length) {
+        fail(mood + ' seed ' + i + ' emitted non-finite geometry: ' + res.ctx._bad[0]);
+        stressBad++;
+      } else if (res.ctx._ops < 400) {
+        fail(mood + ' seed ' + i + ' came out nearly empty (' + res.ctx._ops + ' ops)');
+        stressBad++;
+      }
+    }
+  });
+  if (!stressBad) ok(stressN + ' new-family sheets across the full orbit and all three LODs');
 }
 
 console.log('reproducibility');
@@ -377,8 +526,8 @@ console.log('element coverage');
     trees: Object.keys(AD.site.trees).length
   };
   const min = {
-    windows: 11, doors: 7, roofs: 10, facades: 10,
-    railings: 5, gear: 7, ornament: 8, vegetation: 4, trees: 8
+    windows: 14, doors: 9, roofs: 12, facades: 12,
+    railings: 5, gear: 9, ornament: 11, vegetation: 4, trees: 10
   };
   let bad = 0;
   Object.keys(min).forEach(function (k) {
@@ -393,7 +542,11 @@ console.log('element coverage');
   const ctx = makeCtx();
   const pens = AD.stroke.makePens(AD.rng.makeRng('spec'), AD.style.pens.dryNib);
   const skew = [{ x: 40, y: 300 }, { x: 210, y: 262 }, { x: 196, y: 90 }, { x: 55, y: 130 }];
-  const p = { lod: 1, glassAccent: '#6f88a3', doorAccent: '#c9a34a', vegAccent: '#7d8f6a', signAccent: '#c9a34a' };
+  const p = {
+    lod: 1, glassAccent: '#6f88a3', doorAccent: '#c9a34a', vegAccent: '#7d8f6a',
+    signAccent: '#c9a34a', trimAccent: '#b3873f',
+    flora: AD.style.plantColor(AD.rng.makeRng('spec:flora'), 'japanese', 'windowBox')
+  };
   let broke = 0;
   ['windows', 'doors'].forEach(function (fam) {
     Object.keys(AD.openings[fam]).forEach(function (name) {
@@ -458,19 +611,46 @@ console.log('element coverage');
     });
   });
   AD.site.treeNames.forEach(function (name) {
+    // once with no palette at all (the vegAccent fallback path)…
     run('tree ' + name, function (c) {
       const rr = AD.rng.makeRng('t:' + name);
       AD.site.trees[name](c, R, pens, rr, p,
         { type: name, x: 7, z: 2, h: AD.site.treeHeight(name, rr) });
+    });
+    // …and once fully coloured, the way building.js hands it over
+    run('tree ' + name + ' (coloured)', function (c) {
+      const rr = AD.rng.makeRng('tc:' + name);
+      AD.site.trees[name](c, R, pens, rr, p, {
+        type: name, x: -7, z: 1, h: AD.site.treeHeight(name, rr),
+        col: AD.style.plantColor(AD.rng.makeRng('pc:' + name), 'chinese', name)
+      });
+    });
+    // …and once with no colour hints whatsoever, to prove nothing assumes them
+    run('tree ' + name + ' (mono)', function (c) {
+      const rr = AD.rng.makeRng('tm:' + name);
+      AD.site.trees[name](c, R, pens, rr, { lod: 1 },
+        { type: name, x: 3, z: 0, h: AD.site.treeHeight(name, rr) });
     });
   });
   run('planter', function (c) {
     AD.site.planter(c, R, pens, AD.rng.makeRng('planter'), p,
       { x: 1, z: 4.6, w: 1.4, d: 0.7, h: 0.5, tall: true });
   });
+  run('planter (coloured)', function (c) {
+    AD.site.planter(c, R, pens, AD.rng.makeRng('planter2'), p, {
+      x: 1, z: 4.6, w: 1.4, d: 0.7, h: 0.5, tall: true,
+      col: AD.style.plantColor(AD.rng.makeRng('pc:box'), 'european', 'flowering')
+    });
+  });
   run('ground planting', function (c) {
     AD.site.groundPlanting(c, R, pens, AD.rng.makeRng('tufts'), p,
       { x: 0, z: 4.4, spread: 1.2, n: 4, scale: 1 });
+  });
+  run('ground planting (coloured)', function (c) {
+    AD.site.groundPlanting(c, R, pens, AD.rng.makeRng('tufts2'), p, {
+      x: 0, z: 4.4, spread: 1.2, n: 4, scale: 1,
+      col: AD.style.plantColor(AD.rng.makeRng('pc:grass'), 'greek', 'grass')
+    });
   });
   ['windowBox', 'potted'].forEach(function (name) {
     run('vegetation ' + name, function (c) {
@@ -502,8 +682,9 @@ console.log('element coverage');
   if (!broke3d) {
     ok('every roof, gear, ornament, façade and planting variant inks cleanly ' +
       '(' + (AD.roofs.roofNames.length + AD.details.gearNames.length +
-        AD.details.ornamentNames.length + AD.site.treeNames.length +
-        AD.facade.systemNames.length + 6) + ' checks)');
+        AD.details.ornamentNames.length + AD.site.treeNames.length * 3 +
+        AD.facade.systemNames.length + 8) + ' checks, planting run coloured, ' +
+      'uncoloured and mono)');
   }
 }
 

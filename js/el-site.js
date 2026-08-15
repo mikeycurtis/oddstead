@@ -15,6 +15,40 @@
     return out;
   }
 
+  // --- planting colour ------------------------------------------------------
+  // Each planted thing carries the palette chosen for it at generate time
+  // (spec.col: {leaf, deep, pale, bloom, bark}), so the colours are as
+  // reproducible as the geometry. Every fill goes down BEFORE the ink and stays
+  // translucent — a canopy tints the building behind it, it never hides it.
+  function pal(spec, p) {
+    if (spec && spec.col) return spec.col;
+    if (p && p.flora) return p.flora;
+    const v = p && p.vegAccent;
+    return v ? { leaf: v, deep: v, pale: v, bloom: null, bark: null } : null;
+  }
+  function FA() { return AD.style.floraAlpha; }
+
+  function leafFill(ctx, pts, spec, p, alpha, key) {
+    const c = pal(spec, p);
+    if (!c) return;
+    const col = c[key || 'leaf'] || c.leaf;
+    if (!col) return;
+    S.polyFill(ctx, pts, col, alpha == null ? FA().canopy : alpha);
+  }
+
+  /** One flower dab: a small diamond of colour under a hairline ring. */
+  function bloomDab(ctx, pens, rng, p, spec, x, y, r) {
+    const c = pal(spec, p);
+    if (!c || !c.bloom || p.lod < 0.6) return;
+    S.polyFill(ctx, [
+      { x: x - r, y: y }, { x: x, y: y - r },
+      { x: x + r, y: y }, { x: x, y: y + r }
+    ], c.bloom, FA().bloom);
+    if (p.lod >= 0.75) {
+      S.strokeEllipse(ctx, pens.hair, x, y, r * 0.75, r * 0.65, { lod: p.lod, alpha: 0.7 });
+    }
+  }
+
   /** Long wobbly ground line running past the building. */
   function groundLine(ctx, R, pens, rng, p, spec) {
     const half = spec.reach;
@@ -112,13 +146,28 @@
       const rr = r * rng.range(0.78, 1.18);
       pts.push({ x: top.x + Math.cos(a) * rr, y: cy + Math.sin(a) * rr * 0.9 });
     }
-    if (p.vegAccent) S.polyFill(ctx, pts, p.vegAccent, 0.26);
+    leafFill(ctx, pts, spec, p, FA().canopy);
+    // the shaded flank of the crown, a shade deeper than the rest
+    const shade = [
+      { x: top.x - r * 0.95, y: cy + r * 0.6 }, { x: top.x + r * 0.05, y: cy + r * 0.7 },
+      { x: top.x + r * 0.05, y: cy - r * 0.55 }, { x: top.x - r * 0.9, y: cy - r * 0.4 }
+    ];
+    leafFill(ctx, shade, spec, p, FA().canopy * 0.5, 'deep');
     S.strokePath(ctx, pens.detail, pts, { lod: p.lod, close: true, width: 0.95 });
     if (p.lod >= 0.6) {
       S.scribbleFill(ctx, pens.hatch, [
         { x: top.x - r * 0.8, y: cy + r * 0.5 }, { x: top.x + r * 0.2, y: cy + r * 0.65 },
         { x: top.x + r * 0.2, y: cy - r * 0.5 }, { x: top.x - r * 0.8, y: cy - r * 0.35 }
       ], { density: Math.round(rng.range(6, 12)), lod: p.lod, width: 0.85, alpha: 0.6 });
+    }
+    const col = pal(spec, p);
+    if (col && col.bloom && p.lod >= 0.65) {
+      const n = rng.int(3, 6);
+      for (let i = 0; i < n; i++) {
+        const a = rng.range(0, Math.PI * 2), rr = r * rng.range(0.2, 0.9);
+        bloomDab(ctx, pens, rng, p, spec,
+          top.x + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.9, rng.range(1.1, 2));
+      }
     }
   }
 
@@ -138,7 +187,7 @@
       right.push({ x: x + spread + rng.range(-1, 1), y: y });
     }
     const ring = left.concat(right.slice().reverse());
-    if (p.vegAccent) S.polyFill(ctx, ring, p.vegAccent, 0.24);
+    leafFill(ctx, ring, spec, p, FA().canopy * 0.92);
     S.strokePath(ctx, pens.detail, left, { lod: p.lod, width: 0.9 });
     S.strokePath(ctx, pens.detail, right, { lod: p.lod, width: 0.9 });
     S.strokePath(ctx, pens.detail, [left[0], right[0]], { lod: p.lod, width: 0.8 });
@@ -162,13 +211,23 @@
     }
     pts.push({ x: base.x + r * 0.9, y: base.y });
     pts.unshift({ x: base.x - r * 0.9, y: base.y });
-    if (p.vegAccent) S.polyFill(ctx, pts, p.vegAccent, 0.24);
+    leafFill(ctx, pts, spec, p, FA().canopy);
     S.strokePath(ctx, pens.detail, pts, { lod: p.lod, width: 0.85 });
     if (p.lod >= 0.65) {
       S.scribbleFill(ctx, pens.hatch, [
         { x: base.x - r * 0.7, y: base.y }, { x: base.x + r * 0.7, y: base.y },
         { x: base.x + r * 0.5, y: base.y - r * 0.7 }, { x: base.x - r * 0.5, y: base.y - r * 0.7 }
       ], { density: Math.round(rng.range(5, 10)), lod: p.lod, width: 0.8, alpha: 0.55 });
+    }
+    // a flowering shrub carries a few dabs of colour, nothing more
+    const col = pal(spec, p);
+    if (col && col.bloom && p.lod >= 0.6) {
+      const n = rng.int(3, 7);
+      for (let i = 0; i < n; i++) {
+        bloomDab(ctx, pens, rng, p, spec,
+          base.x + rng.range(-r * 0.8, r * 0.8),
+          base.y - rng.range(0.1, 0.75) * r, rng.range(1, 1.9));
+      }
     }
   }
 
@@ -186,6 +245,11 @@
       const w = thick * (1 - t * 0.45);
       left.push({ x: x - w, y: y });
       right.push({ x: x + w, y: y });
+    }
+    // a whisper of bark under the two trunk lines
+    const c = pal(spec, p);
+    if (c && c.bark) {
+      S.polyFill(ctx, left.concat(right.slice().reverse()), c.bark, FA().trunk);
     }
     S.strokePath(ctx, pens.detail, left, { lod: p.lod, width: 0.9 });
     S.strokePath(ctx, pens.detail, right, { lod: p.lod, width: 0.9 });
@@ -218,10 +282,9 @@
       const ey = c.y + Math.sin(a) * span * 0.55 + span * rng.range(0.1, 0.4);
       const mx = (c.x + ex) / 2, my = (c.y + ey) / 2 - span * rng.range(0.25, 0.45);
       const rib = [c, { x: mx, y: my }, { x: ex, y: ey }];
-      if (p.vegAccent) {
-        S.polyFill(ctx, [c, { x: mx, y: my - span * 0.12 }, { x: ex, y: ey },
-          { x: mx, y: my + span * 0.12 }], p.vegAccent, 0.2);
-      }
+      leafFill(ctx, [c, { x: mx, y: my - span * 0.12 }, { x: ex, y: ey },
+        { x: mx, y: my + span * 0.12 }], spec, p, FA().frond,
+      i % 2 === 0 ? 'leaf' : 'deep');
       S.strokePath(ctx, pens.detail, rib, { lod: p.lod, width: 0.85 });
       if (p.lod < 0.65) continue;
       // barbs along the frond
@@ -259,7 +322,8 @@
         const rr = r * rng.range(0.72, 1.14);
         pts.push({ x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr * 0.72 });
       }
-      if (p.vegAccent) S.polyFill(ctx, pts, p.vegAccent, 0.22);
+      // alternate silvered and deeper lobes — the olive's two-tone canopy
+      leafFill(ctx, pts, spec, p, FA().canopy * 0.85, i % 2 === 0 ? 'leaf' : 'deep');
       S.strokePath(ctx, pens.detail, pts, { lod: p.lod, close: true, width: 0.85 });
       S.strokePath(ctx, pens.hair, [fork, { x: cx, y: cy + r * 0.5 }], { lod: p.lod, alpha: 0.8 });
       if (p.lod >= 0.65) {
@@ -299,10 +363,9 @@
           const x = a.x + (b.x - a.x) * f, y = a.y + (b.y - a.y) * f;
           const dx = rng.range(6, 15) * (rng.chance(0.5) ? 1 : -1);
           const tip = { x: x + dx, y: y - rng.range(2, 9) };
-          if (p.vegAccent) {
-            S.polyFill(ctx, [{ x: x, y: y }, { x: (x + tip.x) / 2, y: (y + tip.y) / 2 - 2.5 },
-              tip, { x: (x + tip.x) / 2, y: (y + tip.y) / 2 + 2.5 }], p.vegAccent, 0.22);
-          }
+          leafFill(ctx, [{ x: x, y: y }, { x: (x + tip.x) / 2, y: (y + tip.y) / 2 - 2.5 },
+            tip, { x: (x + tip.x) / 2, y: (y + tip.y) / 2 + 2.5 }], spec, p,
+          FA().frond, k % 2 === 0 ? 'leaf' : 'pale');
           S.strokePath(ctx, pens.hair, [{ x: x, y: y }, tip], { lod: p.lod, alpha: 0.9 });
         }
       }
@@ -323,7 +386,7 @@
       const rr = r * rng.range(0.7, 1.2);
       pts.push({ x: c.x + Math.cos(a) * rr, y: cy + Math.sin(a) * rr * 0.82 });
     }
-    if (p.vegAccent) S.polyFill(ctx, pts, p.vegAccent, 0.2);
+    leafFill(ctx, pts, spec, p, FA().canopy * 0.8);
     S.strokePath(ctx, pens.detail, pts, { lod: p.lod, close: true, width: 0.9 });
     if (p.lod >= 0.55) {
       // a couple of branches reaching into the canopy
@@ -334,18 +397,33 @@
       }
     }
     if (p.lod < 0.65) return;
+    const col = pal(spec, p);
+    const petal = (col && col.bloom) || null;
     const blooms = rng.int(6, 12);
     for (let i = 0; i < blooms; i++) {
       const a = rng.range(0, Math.PI * 2);
       const rr = r * rng.range(0.15, 0.95);
       const bx = c.x + Math.cos(a) * rr, by = cy + Math.sin(a) * rr * 0.8;
-      S.strokeEllipse(ctx, pens.hair, bx, by, rng.range(1, 2.2), rng.range(1, 2.2), { lod: p.lod });
+      const br = rng.range(1, 2.2);
+      if (petal) {
+        S.polyFill(ctx, [
+          { x: bx - br, y: by }, { x: bx, y: by - br },
+          { x: bx + br, y: by }, { x: bx, y: by + br }
+        ], petal, FA().bloom);
+      }
+      S.strokeEllipse(ctx, pens.hair, bx, by, br, rng.range(1, 2.2), { lod: p.lod });
     }
     // a few petals on the ground below
     if (rng.chance(0.6)) {
       const base = R.P(spec.x, 0, spec.z);
       for (let i = 0; i < 4; i++) {
         const x = base.x + rng.range(-r, r), y = base.y + rng.range(-2, 3);
+        if (petal) {
+          S.polyFill(ctx, [
+            { x: x - 1.4, y: y }, { x: x, y: y - 1.1 },
+            { x: x + 1.8, y: y }, { x: x, y: y + 1.1 }
+          ], petal, FA().bloom * 0.8);
+        }
         S.strokePath(ctx, pens.hair, [{ x: x, y: y }, { x: x + rng.range(1, 3), y: y }],
           { lod: p.lod, alpha: 0.6 });
       }
@@ -374,7 +452,7 @@
         { x: x - spread, y: y0 + 2 }, { x: x - spread * 0.25, y: y0 - 1 },
         { x: x, y: y1 }, { x: x + spread * 0.25, y: y0 - 1 }, { x: x + spread, y: y0 + 2 }
       ];
-      if (p.vegAccent) S.polyFill(ctx, tier, p.vegAccent, 0.2);
+      leafFill(ctx, tier, spec, p, FA().canopy * 0.85, i % 2 === 0 ? 'leaf' : 'deep');
       S.strokePath(ctx, pens.detail, tier, { lod: p.lod, width: 0.85 });
       outline.push(tier);
       if (p.lod >= 0.7) {
@@ -389,11 +467,110 @@
       { lod: p.lod, width: 0.8 });
   }
 
+  /** Willow: a short trunk under a broad crown of trailing withies. */
+  function willow(ctx, R, pens, rng, p, spec) {
+    const thick = Math.max(1.2, spec.h * R.pxPerUnit * 0.032);
+    const t = stem(ctx, R, pens, rng, p, spec, spec.h * R.pxPerUnit * rng.range(-0.06, 0.06), thick);
+    const c = t.crown;
+    const base = R.P(spec.x, 0, spec.z);
+    const r = spec.h * R.pxPerUnit * rng.range(0.34, 0.46);
+    const cy = c.y - r * 0.3;
+    // the crown mass: wide, low and softly domed
+    const lobes = rng.int(7, 10);
+    const pts = [];
+    for (let i = 0; i < lobes; i++) {
+      const a = Math.PI + (i / (lobes - 1)) * Math.PI;
+      const rr = r * rng.range(0.82, 1.18);
+      pts.push({ x: c.x + Math.cos(a) * rr * 1.15, y: cy + Math.sin(a) * rr * 0.62 });
+    }
+    const skirt = [];
+    const strands = p.lod >= 0.6 ? rng.int(7, 11) : 4;
+    for (let i = 0; i < strands; i++) {
+      const f = strands === 1 ? 0.5 : i / (strands - 1);
+      const sx = c.x + (f - 0.5) * 2 * r * 1.1;
+      const sy = cy + Math.sin(Math.PI * f) * -r * 0.1;
+      const drop = Math.min(Math.abs(base.y - sy) * 0.85,
+        r * rng.range(1.1, 1.9) * (0.55 + 0.45 * Math.sin(Math.PI * f)));
+      skirt.push({ x: sx + rng.range(-2, 2), y: sy + drop });
+    }
+    // fill the whole hanging mass once, lightly, then draw the withies over it
+    if (skirt.length > 1) {
+      leafFill(ctx, pts.concat(skirt.slice().reverse()), spec, p, FA().frond);
+    }
+    leafFill(ctx, pts, spec, p, FA().canopy * 0.6, 'deep');
+    S.strokePath(ctx, pens.detail, pts, { lod: p.lod, width: 0.9 });
+    for (let i = 0; i < skirt.length; i++) {
+      const s = skirt[i];
+      const ax = c.x + (s.x - c.x) * 0.35;
+      S.strokePath(ctx, pens.hair, [
+        { x: ax, y: cy - r * 0.1 },
+        { x: (ax + s.x) / 2 + rng.range(-2, 2), y: (cy + s.y) / 2 },
+        s
+      ], { lod: p.lod, alpha: 0.85, filament: 0 });
+    }
+    if (p.lod >= 0.65) {
+      S.scribbleFill(ctx, pens.hatch, [
+        { x: c.x - r * 0.8, y: cy + r * 0.35 }, { x: c.x + r * 0.5, y: cy + r * 0.4 },
+        { x: c.x + r * 0.5, y: cy - r * 0.3 }, { x: c.x - r * 0.8, y: cy - r * 0.25 }
+      ], { density: Math.round(rng.range(5, 10)), lod: p.lod, width: 0.75, alpha: 0.45 });
+    }
+  }
+
+  /** Maple: a slim trunk forking into two or three turning-colour lobes. */
+  function maple(ctx, R, pens, rng, p, spec) {
+    const thick = Math.max(1, spec.h * R.pxPerUnit * 0.028);
+    const t = stem(ctx, R, pens, rng, p, spec, spec.h * R.pxPerUnit * rng.range(-0.07, 0.07), thick);
+    const c = t.crown;
+    const spread = spec.h * R.pxPerUnit * rng.range(0.26, 0.36);
+    const arms = rng.int(2, 3);
+    for (let i = 0; i < arms; i++) {
+      const dx = (i - (arms - 1) / 2) * spread * rng.range(0.9, 1.3);
+      const cx = c.x + dx;
+      const cy = c.y - spread * rng.range(0.35, 0.85);
+      const r = spread * rng.range(0.62, 0.96);
+      const lobes = rng.int(7, 10);
+      const pts = [];
+      for (let k = 0; k < lobes; k++) {
+        const a = (k / lobes) * Math.PI * 2;
+        // the palmate crown: notched rather than round
+        const rr = r * (k % 2 === 0 ? rng.range(0.95, 1.2) : rng.range(0.6, 0.82));
+        pts.push({ x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr * 0.8 });
+      }
+      leafFill(ctx, pts, spec, p, FA().canopy, i === 0 ? 'leaf' : 'pale');
+      S.strokePath(ctx, pens.detail, pts, { lod: p.lod, close: true, width: 0.85 });
+      S.strokePath(ctx, pens.hair, [c, { x: cx, y: cy + r * 0.45 }], { lod: p.lod, alpha: 0.8 });
+      if (p.lod >= 0.65) {
+        S.scribbleFill(ctx, pens.hatch, [
+          { x: cx - r * 0.55, y: cy + r * 0.3 }, { x: cx + r * 0.4, y: cy + r * 0.35 },
+          { x: cx + r * 0.4, y: cy - r * 0.3 }, { x: cx - r * 0.55, y: cy - r * 0.25 }
+        ], { density: Math.round(rng.range(4, 9)), lod: p.lod, width: 0.75, alpha: 0.45 });
+      }
+    }
+    // a scatter of fallen leaves at the foot
+    if (p.lod >= 0.7 && rng.chance(0.6)) {
+      const base = R.P(spec.x, 0, spec.z);
+      const col = pal(spec, p);
+      for (let i = 0; i < 4; i++) {
+        const x = base.x + rng.range(-spread, spread), y = base.y + rng.range(-2, 3);
+        if (col && col.leaf) {
+          S.polyFill(ctx, [
+            { x: x - 1.8, y: y }, { x: x, y: y - 1.3 },
+            { x: x + 1.8, y: y }, { x: x, y: y + 1.3 }
+          ], col.leaf, FA().tuft * 1.4);
+        }
+        S.strokePath(ctx, pens.hair, [{ x: x - 1.6, y: y }, { x: x + 1.6, y: y }],
+          { lod: p.lod, alpha: 0.6 });
+      }
+    }
+  }
+
   NS.trees = {
     round: treeRound, cypress: cypress, bush: bush,
-    palm: palm, olive: olive, bamboo: bamboo, flowering: flowering, pine: pine
+    palm: palm, olive: olive, bamboo: bamboo, flowering: flowering, pine: pine,
+    willow: willow, maple: maple
   };
-  NS.treeNames = ['round', 'cypress', 'bush', 'palm', 'olive', 'bamboo', 'flowering', 'pine'];
+  NS.treeNames = ['round', 'cypress', 'bush', 'palm', 'olive', 'bamboo',
+    'flowering', 'pine', 'willow', 'maple'];
 
   /** Typical height range for a planted form, in world units. */
   NS.treeHeight = function (type, rng) {
@@ -405,6 +582,8 @@
       case 'bamboo': return rng.range(3, 6);
       case 'flowering': return rng.range(3, 5.5);
       case 'pine': return rng.range(4.5, 9);
+      case 'willow': return rng.range(3.5, 6.5);
+      case 'maple': return rng.range(3, 5.5);
       default: return rng.range(3, 7);
     }
   };
@@ -439,17 +618,27 @@
       { x: cx + r * 0.8, y: cy - r * rng.range(0.7, 1.3) },
       { x: cx - r * 0.8, y: cy - r * rng.range(0.7, 1.3) }
     ];
-    if (p.vegAccent) S.polyFill(ctx, mound, p.vegAccent, 0.24);
+    leafFill(ctx, mound, spec, p, FA().canopy);
     S.scribbleFill(ctx, pens.hair, mound, {
       density: Math.round(rng.range(5, 11)), lod: p.lod, width: 0.85, alpha: 0.85
     });
+    const col = pal(spec, p);
+    if (col && col.bloom && p.lod >= 0.6) {
+      const n = rng.int(2, 5);
+      for (let i = 0; i < n; i++) {
+        bloomDab(ctx, pens, rng, p, spec,
+          cx + rng.range(-r * 0.85, r * 0.85), cy - rng.range(0, r * 0.9), rng.range(1, 1.9));
+      }
+    }
     if (p.lod >= 0.7 && spec.tall) {
       // a slim stem or two lifting out of the box
       for (let i = 0; i < 2; i++) {
         const sx = cx + rng.range(-r * 0.6, r * 0.6);
+        const ty = cy - r * rng.range(1.6, 2.6);
         S.strokePath(ctx, pens.hair, [
-          { x: sx, y: cy }, { x: sx + rng.range(-3, 3), y: cy - r * rng.range(1.6, 2.6) }
+          { x: sx, y: cy }, { x: sx + rng.range(-3, 3), y: ty }
         ], { lod: p.lod, alpha: 0.85 });
+        bloomDab(ctx, pens, rng, p, spec, sx + rng.range(-2, 2), ty, rng.range(1.2, 2.1));
       }
     }
   }
@@ -471,8 +660,14 @@
         fan.push(tip);
         S.strokePath(ctx, pens.hair, [{ x: a.x, y: a.y }, tip], { lod: p.lod, alpha: 0.8 });
       }
-      if (p.vegAccent && fan.length > 2) {
-        S.polyFill(ctx, [{ x: a.x, y: a.y }].concat(fan), p.vegAccent, 0.16);
+      if (fan.length > 2) {
+        leafFill(ctx, [{ x: a.x, y: a.y }].concat(fan), spec, p, FA().tuft);
+      }
+      // a low tuft may be flowering; one dab is plenty at this scale
+      if (p.lod >= 0.7 && rng.chance(0.4)) {
+        bloomDab(ctx, pens, rng, p, spec,
+          a.x + rng.range(-hh * 0.4, hh * 0.4), a.y - hh * rng.range(0.5, 1),
+          rng.range(1, 1.7));
       }
     }
   }

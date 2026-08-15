@@ -158,10 +158,19 @@
     }
 
     // --- greenery on the wall ----------------------------------------------
+    // A climber gets its own colours here, at generate time, so the same wall
+    // is planted the same way every time it is drawn.
+    const mood = opts.mood;
     if (rng.chance(clamp(det.vines * budget, 0, 0.5))) {
-      cfg.ornaments.push({ type: 'vine', u: rng.range(0.06, 0.9) });
+      cfg.ornaments.push({
+        type: 'vine', u: rng.range(0.06, 0.9),
+        col: ST.plantColor(rng, mood, 'vine')
+      });
     } else if (rng.chance(clamp(det.vines * 0.55 * budget, 0, 0.35))) {
-      cfg.ornaments.push({ type: 'trellis', u: rng.range(0.06, 0.7) });
+      cfg.ornaments.push({
+        type: 'trellis', u: rng.range(0.06, 0.7),
+        col: ST.plantColor(rng, mood, 'vine')
+      });
     }
     return cfg;
   }
@@ -221,6 +230,8 @@
       if (!flatTop) {
         ov = roofRng.range(0.12, 0.4) + det.eave * roofRng.range(0.1, 0.5);
         if (variant === 'broadEave') ov += roofRng.range(0.45, 0.9);
+        // a swept roof needs the reach for its corners to lift into
+        if (variant === 'sweptEave') ov += roofRng.range(0.55, 1.05);
       }
       return {
         variant: variant,
@@ -253,6 +264,7 @@
           blank: pr.w * pr.d < 12 && rng.chance(0.3),
           door: isDoor,
           detail: det,
+          mood: mood,
           detailBudget: density
         });
       });
@@ -271,13 +283,20 @@
         if (!AD.details.gear[type]) type = 'chimney';
         const pitched = roof.variant && roof.variant !== 'flat';
         // crowning pieces belong on the ridge or the centre of the deck;
-        // working gear can wander, but pitched roofs pull it toward the ridge
+        // working gear can wander, but pitched roofs pull it toward the ridge.
+        // Corner pieces are the exception: they sit out at the roof's edge.
         const crown = type === 'finial' || type === 'cupola' || type === 'spire';
-        const inset = crown ? 0.44 : (pitched ? 0.34 : 0.16);
-        const x = pr.x + pr.w * gearRng.range(inset, 1 - inset);
-        const z = pr.z + pr.d * gearRng.range(inset, 1 - inset);
-        const y = pr.y0 + pr.h + (crown ? roof.h * (pitched ? 0.98 : 1)
-          : roof.variant === 'flat' ? roof.h * 0.85 : roof.h * gearRng.range(0.3, 0.6));
+        const corner = type === 'acroterion';
+        const inset = corner ? 0.03 : crown ? 0.44 : (pitched ? 0.34 : 0.16);
+        const x = corner
+          ? pr.x + pr.w * (gearRng.chance(0.5) ? inset : 1 - inset)
+          : pr.x + pr.w * gearRng.range(inset, 1 - inset);
+        const z = corner
+          ? pr.z + pr.d * (gearRng.chance(0.5) ? inset : 1 - inset)
+          : pr.z + pr.d * gearRng.range(inset, 1 - inset);
+        const y = pr.y0 + pr.h + (corner ? 0
+          : crown ? roof.h * (pitched ? 0.98 : 1)
+            : roof.variant === 'flat' ? roof.h * 0.85 : roof.h * gearRng.range(0.3, 0.6));
         gear.push({
           prism: i, type: type,
           x: x, z: z, y: y,
@@ -368,12 +387,32 @@
       }
     }
 
+    // --- planting colour ----------------------------------------------------
+    // Colour is decided here, not at draw time: its own stream, so adding a
+    // tree never re-rolls the building, and every plant on the sheet carries a
+    // palette that is as reproducible as its position. Species first (a cypress
+    // is dark wherever it grows), family second (the flowers around it are the
+    // family's). `flora` is the building-wide palette used by wall planting —
+    // window boxes, pots, climbers — so one hand plants the whole sheet.
+    const floraRng = master.fork('flora');
+    const flora = ST.plantColor(floraRng, mood, 'windowBox');
+    site.trees.forEach(function (t) {
+      t.col = ST.plantColor(floraRng, mood, t.type);
+    });
+    site.planters.forEach(function (b) {
+      b.col = ST.plantColor(floraRng, mood, b.tall ? 'flowering' : 'windowBox');
+    });
+    site.planting.forEach(function (g) {
+      g.col = ST.plantColor(floraRng, mood, 'grass');
+    });
+
     return {
       seed: String(seed),
       mood: mood,
       density: density,
       penName: penName,
       accents: accents,
+      flora: flora,
       kind: mass.kind,
       mass: mass,
       frontIdx: frontIdx,
@@ -453,7 +492,8 @@
       doorAccent: palette.door,
       vegAccent: palette.veg,
       signAccent: palette.sign,
-      trimAccent: palette.trim
+      trimAccent: palette.trim,
+      flora: plan.flora
     };
 
     // shaded side: hatch the whole wall first, then cut the openings into it
@@ -490,10 +530,10 @@
         if (lod >= (ORN_LOD[o.type] == null ? 0.6 : ORN_LOD[o.type])) {
           orn(ctx, frame, pens, rng, p, o);
         }
-      } else if (o.type === 'vine' && lod >= 0.6) {
-        AD.details.vegetation.vine(ctx, frame, pens, rng, p, o);
-      } else if (o.type === 'trellis' && lod >= 0.6) {
-        AD.details.vegetation.trellis(ctx, frame, pens, rng, p, o);
+      } else if ((o.type === 'vine' || o.type === 'trellis') && lod >= 0.6) {
+        // a climber keeps the colours it was planted with
+        const pv = o.col ? Object.assign({}, p, { flora: o.col }) : p;
+        AD.details.vegetation[o.type](ctx, frame, pens, rng, pv, o);
       }
     }
   }
@@ -515,7 +555,8 @@
     const palette = plan.accents;
     const p = {
       lod: lod, glassAccent: palette.glass, doorAccent: palette.door,
-      vegAccent: palette.veg, signAccent: palette.sign, trimAccent: palette.trim
+      vegAccent: palette.veg, signAccent: palette.sign, trimAccent: palette.trim,
+      flora: plan.flora
     };
     const siteRng = AD.rng.makeRng(plan.seed + ':drawsite');
 

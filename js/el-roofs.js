@@ -311,6 +311,177 @@
     });
   }
 
+  // --- swept eaves, lifted corners -----------------------------------------
+  // A dished double pitch: the slope sags away from a high ridge, the eave line
+  // lifts sharply at the two ends, and the covering reads as courses of tile
+  // running down the fall. A broad East Asian temperament, not a copy of any
+  // particular building.
+  function roofSweptEave(ctx, R, pens, rng, p) {
+    const b = box(R), h = R.roof.h;
+    const alongZ = R.roof.ridgeAxis === 'z';
+    const up = (R.roof.upturn == null ? 0.22 : R.roof.upturn) * 2.4 + h * 0.12;
+    const n = p.lod >= 0.6 ? 10 : 5;
+    const P = function (v) { return R.P(v.x, v.y, v.z); };
+    const mid = { x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2 };
+
+    // lift(t): flat along the middle of the eave, rising hard at both ends
+    const lift = function (t) {
+      const k = 2 * t - 1;
+      return up * k * k * k * k;
+    };
+    // surface point: t runs along the ridge, s crosses the slope (0 eave, 1 ridge)
+    const surf = function (side, t, s) {
+      const eaveY = b.y + lift(t);
+      const y = eaveY + (b.y + h - eaveY) * Math.pow(s, 1.75);
+      if (alongZ) {
+        const ex = side > 0 ? b.x1 : b.x0;
+        return G.v3(ex + (mid.x - ex) * s, y, b.z0 + (b.z1 - b.z0) * t);
+      }
+      const ez = side > 0 ? b.z1 : b.z0;
+      return G.v3(b.x0 + (b.x1 - b.x0) * t, y, ez + (mid.z - ez) * s);
+    };
+    const rowAt = function (side, s) {
+      const pts = [];
+      for (let i = 0; i <= n; i++) pts.push(surf(side, i / n, s));
+      return pts;
+    };
+
+    const ridge = rowAt(1, 1);
+    const fascia = Math.max(0.12, Math.min(0.4, h * 0.18));
+
+    [1, -1].forEach(function (side) {
+      const eave = rowAt(side, 0);
+      if (!visiblePlane(R, surf(side, 0, 0), surf(side, 1, 0), surf(side, 1, 1))) return;
+      const shell = proj(R, eave.concat(rowAt(side, 1).slice().reverse()));
+      accentPoly(ctx, shell, R.roof.accent, rng);
+      // courses following the eave
+      if (p.lod >= 0.5) {
+        const rows = p.lod >= 0.75 ? 3 : 2;
+        for (let k = 1; k <= rows; k++) {
+          S.strokePath(ctx, pens.hatch, proj(R, rowAt(side, k / (rows + 1))),
+            { lod: p.lod, alpha: 0.45, width: 0.85, filament: 0 });
+        }
+      }
+      // ribs running down the fall of the roof
+      if (p.lod >= 0.6) {
+        const ribs = p.lod >= 0.8 ? 7 : 4;
+        for (let i = 1; i < ribs; i++) {
+          const t = i / ribs;
+          const rib = [];
+          for (let k = 0; k <= 4; k++) rib.push(surf(side, t, k / 4));
+          S.strokePath(ctx, pens.hair, proj(R, rib), { lod: p.lod, alpha: 0.6, filament: 0 });
+        }
+      }
+      // the eave itself, its fascia board, and the flared corner tips
+      S.strokePath(ctx, pens.outline, proj(R, eave), { lod: p.lod, width: 0.95, filament: 0 });
+      const low = eave.map(function (v) { return G.v3(v.x, v.y - fascia, v.z); });
+      S.strokePath(ctx, pens.detail, proj(R, low), { lod: p.lod, width: 0.8, filament: 0 });
+      [0, n].forEach(function (i) {
+        const tip = P(eave[i]);
+        const inn = P(eave[i === 0 ? 1 : n - 1]);
+        const dx = tip.x - inn.x, dy = tip.y - inn.y;
+        const l = Math.hypot(dx, dy) || 1;
+        S.strokePath(ctx, pens.detail, [
+          P(low[i]), tip,
+          { x: tip.x + (dx / l) * 5, y: tip.y + (dy / l) * 5 - 5 }
+        ], { lod: p.lod, width: 0.85 });
+      });
+    });
+
+    // ridge: a capped band with a small upturn at each end
+    S.strokePath(ctx, pens.outline, proj(R, ridge), { lod: p.lod, filament: 0 });
+    const r2 = proj(R, ridge);
+    S.strokePath(ctx, pens.hair, r2.map(function (q) { return { x: q.x, y: q.y - 2.8 }; }),
+      { lod: p.lod, alpha: 0.75, filament: 0 });
+    [0, n].forEach(function (i) {
+      const a = r2[i], c = r2[i === 0 ? 1 : n - 1];
+      const dx = a.x - c.x, dy = a.y - c.y;
+      const l = Math.hypot(dx, dy) || 1;
+      S.strokePath(ctx, pens.detail, [
+        { x: a.x, y: a.y + 1 },
+        { x: a.x + (dx / l) * 4, y: a.y + (dy / l) * 4 - 6 }
+      ], { lod: p.lod, width: 0.8 });
+    });
+    // gable ends: ridge tip down to both lifted eave corners
+    [0, n].forEach(function (i) {
+      const e1 = P(surf(1, i / n, 0)), e0 = P(surf(-1, i / n, 0));
+      S.strokePath(ctx, pens.detail, [e0, r2[i]], { lod: p.lod, width: 0.85 });
+      S.strokePath(ctx, pens.detail, [e1, r2[i]], { lod: p.lod, width: 0.85 });
+    });
+  }
+
+  // --- low pediment over an entablature ------------------------------------
+  // A shallow gable whose ends read as a framed triangular field above a
+  // banded cornice with dentils — the classical temperament, generically.
+  function roofPediment(ctx, R, pens, rng, p) {
+    const b = box(R), h = R.roof.h;
+    const alongZ = R.roof.ridgeAxis === 'z';
+    const xm = (b.x0 + b.x1) / 2, zm = (b.z0 + b.z1) / 2;
+    const P = function (v) { return R.P(v.x, v.y, v.z); };
+    let ra, rb, e0, e1;
+    if (alongZ) {
+      ra = G.v3(xm, b.y + h, b.z0); rb = G.v3(xm, b.y + h, b.z1);
+      e0 = [G.v3(b.x0, b.y, b.z0), G.v3(b.x0, b.y, b.z1)];
+      e1 = [G.v3(b.x1, b.y, b.z0), G.v3(b.x1, b.y, b.z1)];
+    } else {
+      ra = G.v3(b.x0, b.y + h, zm); rb = G.v3(b.x1, b.y + h, zm);
+      e0 = [G.v3(b.x0, b.y, b.z0), G.v3(b.x1, b.y, b.z0)];
+      e1 = [G.v3(b.x0, b.y, b.z1), G.v3(b.x1, b.y, b.z1)];
+    }
+    [[e0[0], e0[1], rb, ra], [e1[1], e1[0], ra, rb]].forEach(function (sl) {
+      if (!visiblePlane(R, sl[0], sl[1], sl[2])) return;
+      const q = proj(R, sl);
+      accentPoly(ctx, q, R.roof.accent, rng);
+      if (p.lod >= 0.5) {
+        S.hatchQuad(ctx, pens.hatch, q, {
+          angle: 0.02, gap: R.roof.tileGap == null ? 0.12 : R.roof.tileGap,
+          lod: p.lod, alpha: 0.45, max: p.lod >= 0.8 ? 8 : 4, jitter: 0.02
+        });
+      }
+      S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: 0.9, overshoot: 0.12 });
+    });
+    S.strokePath(ctx, pens.outline, [P(ra), P(rb)], { lod: p.lod });
+
+    // the two gable fields, each framed by a raking cornice
+    [[ra, e0[0], e1[0]], [rb, e0[1], e1[1]]].forEach(function (tri) {
+      const q = proj(R, tri);
+      const cx = (q[0].x + q[1].x + q[2].x) / 3, cy = (q[0].y + q[1].y + q[2].y) / 3;
+      S.strokePath(ctx, pens.outline, [q[1], q[0]], { lod: p.lod, width: 0.95 });
+      S.strokePath(ctx, pens.outline, [q[2], q[0]], { lod: p.lod, width: 0.95 });
+      if (p.lod >= 0.55) {
+        // tympanum: the field set back inside the raking cornice
+        const inner = q.map(function (pt) {
+          return { x: pt.x + (cx - pt.x) * 0.16, y: pt.y + (cy - pt.y) * 0.16 };
+        });
+        S.strokePath(ctx, pens.hair, [inner[1], inner[0], inner[2]],
+          { lod: p.lod, alpha: 0.8, filament: 0 });
+        if (p.lod >= 0.75 && rng.chance(0.6)) {
+          S.scribbleFill(ctx, pens.hair, [
+            inner[1], inner[2],
+            { x: inner[2].x + (inner[0].x - inner[2].x) * 0.45, y: inner[2].y + (inner[0].y - inner[2].y) * 0.45 },
+            { x: inner[1].x + (inner[0].x - inner[1].x) * 0.45, y: inner[1].y + (inner[0].y - inner[1].y) * 0.45 }
+          ], { density: rng.int(5, 9), lod: p.lod, width: 0.7, alpha: 0.4 });
+        }
+      }
+      // the cornice band carrying the pediment, with dentils under it
+      const band = Math.max(2.5, R.pxPerUnit * 0.16);
+      const c0 = { x: q[1].x, y: q[1].y }, c1 = { x: q[2].x, y: q[2].y };
+      S.strokePath(ctx, pens.detail, [c0, c1], { lod: p.lod, width: 0.9 });
+      S.strokePath(ctx, pens.detail,
+        [{ x: c0.x, y: c0.y + band }, { x: c1.x, y: c1.y + band }],
+        { lod: p.lod, width: 0.8 });
+      if (p.lod >= 0.65) {
+        const n = rng.int(6, 12);
+        for (let i = 1; i < n; i++) {
+          const t = i / n;
+          const x = c0.x + (c1.x - c0.x) * t, y = c0.y + (c1.y - c0.y) * t;
+          S.strokePath(ctx, pens.hair, [{ x: x, y: y + 1 }, { x: x, y: y + band - 0.5 }],
+            { lod: p.lod, alpha: 0.75 });
+        }
+      }
+    });
+  }
+
   // --- hip planes, shared by hipped-family roofs ---------------------------
   function hipPlanes(b, h, alongZ, inset) {
     let ra, rb;
@@ -537,10 +708,13 @@
     pantile: roofPantile,
     steppedParapet: roofStepped,
     steepGable: roofSteepGable,
-    crenellated: roofCrenellated
+    crenellated: roofCrenellated,
+    sweptEave: roofSweptEave,
+    pediment: roofPediment
   };
   NS.roofNames = ['flat', 'gabled', 'hipped', 'shed', 'barrel',
-    'broadEave', 'pantile', 'steppedParapet', 'steepGable', 'crenellated'];
+    'broadEave', 'pantile', 'steppedParapet', 'steepGable', 'crenellated',
+    'sweptEave', 'pediment'];
 
   /** roofHeight — how far the roof rises above its prism, used for fit-to-rect. */
   NS.roofHeight = function (variant, pr, rng) {
@@ -556,6 +730,8 @@
       case 'steppedParapet': return rng.range(1.1, 2.4);
       case 'steepGable': return small * rng.range(0.55, 0.85);
       case 'crenellated': return rng.range(0.8, 1.5);
+      case 'sweptEave': return small * rng.range(0.26, 0.4);
+      case 'pediment': return small * rng.range(0.17, 0.27);
       default: return 0.5;
     }
   };

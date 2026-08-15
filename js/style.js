@@ -32,6 +32,126 @@
     ochre: '#b3873f'    // warm earth for render, tile and screenwork
   };
 
+  // --- planting palette -----------------------------------------------------
+  // Greenery is the one place the sheet carries real colour. It stays a flat,
+  // translucent wash laid UNDER the ink: the linework still draws the plant,
+  // the colour only says what kind of plant it is. Alphas live in floraAlpha
+  // and are deliberately low — a canopy must never become an opaque blob over
+  // the building behind it.
+  NS.greens = {
+    cedar: '#3f5945',       // near-black conifer green
+    pineDeep: '#4a6146',
+    box: '#51694a',         // clipped hedging
+    moss: '#6c7f50',
+    gardenGreen: '#5f7d4f',
+    hedge: '#617f55',
+    bamboo: '#6d9152',
+    springGreen: '#7d9a55',
+    willow: '#89a25e',
+    oliveGrey: '#8b9679',   // the silvered underside of an olive
+    oliveDeep: '#6a7350',
+    mapleRed: '#b05a41',    // autumn foliage, used sparingly
+    autumn: '#c08b45'
+  };
+
+  NS.blooms = {
+    blossomPink: '#dba0aa',
+    blossomWhite: '#e7ddca',
+    wisteria: '#9b90b6',
+    lavender: '#8e8ab2',
+    geranium: '#c2563f',
+    mustardBloom: '#cfa74d',
+    plum: '#a94a5c',
+    jasmine: '#e0d5ad'
+  };
+
+  NS.barks = {
+    warm: '#7a6349',
+    grey: '#77736a',
+    dark: '#5d4f3f',
+    pale: '#8d7f68'
+  };
+
+  // Ceilings, not settings: every fill below is drawn under line work.
+  NS.floraAlpha = {
+    canopy: 0.26,   // tree crowns and shrub masses
+    frond: 0.2,     // open forms — palms, bamboo leaves, grasses
+    tuft: 0.17,     // ground planting
+    bloom: 0.4,     // small dabs only, never a large area
+    trunk: 0.24
+  };
+
+  /** Darken (k < 1) or lighten (k > 1) a #rrggbb string. */
+  function shade(hex, k) {
+    if (typeof hex !== 'string' || hex.charAt(0) !== '#' || hex.length !== 7) return hex;
+    const out = ['#'];
+    for (let i = 0; i < 3; i++) {
+      const v = parseInt(hex.substr(1 + i * 2, 2), 16);
+      const n = Math.max(0, Math.min(255, Math.round(v * k)));
+      out.push((n < 16 ? '0' : '') + n.toString(16));
+    }
+    return out.join('');
+  }
+  NS.shade = shade;
+
+  // What each planted form tends to be, before its family tints it.
+  const SPECIES_FLORA = {
+    round: { leaf: ['gardenGreen', 'hedge', 'springGreen'], bloomP: 0.12 },
+    bush: { leaf: ['box', 'hedge', 'gardenGreen'], bloomP: 0.4 },
+    cypress: { leaf: ['cedar', 'pineDeep', 'oliveDeep'], bloomP: 0 },
+    pine: { leaf: ['pineDeep', 'cedar', 'moss'], bloomP: 0 },
+    olive: { leaf: ['oliveGrey', 'oliveDeep'], bloomP: 0.08, bark: 'grey' },
+    palm: { leaf: ['bamboo', 'springGreen', 'gardenGreen'], bloomP: 0, bark: 'pale' },
+    bamboo: { leaf: ['bamboo', 'springGreen', 'willow'], bloomP: 0 },
+    flowering: { leaf: ['springGreen', 'gardenGreen', 'moss'], bloomP: 1 },
+    willow: { leaf: ['willow', 'springGreen', 'moss'], bloomP: 0.1, bark: 'grey' },
+    maple: { leaf: ['mapleRed', 'autumn', 'gardenGreen'], bloomP: 0, bark: 'dark' },
+    windowBox: { leaf: ['hedge', 'gardenGreen', 'springGreen'], bloomP: 0.75 },
+    vine: { leaf: ['gardenGreen', 'moss', 'hedge'], bloomP: 0.3 },
+    grass: { leaf: ['springGreen', 'gardenGreen', 'moss'], bloomP: 0.3 }
+  };
+
+  // Each family's own garden: the greens it leans on, the flowers it shows.
+  const MOOD_FLORA = {
+    town: { leaf: ['gardenGreen', 'hedge', 'moss'], bloom: ['geranium', 'blossomWhite', 'mustardBloom'], bark: 'warm' },
+    tower: { leaf: ['box', 'hedge', 'gardenGreen'], bloom: ['blossomWhite', 'mustardBloom'], bark: 'grey' },
+    industrial: { leaf: ['moss', 'box', 'oliveDeep'], bloom: ['mustardBloom', 'blossomWhite'], bark: 'grey' },
+    mediterranean: { leaf: ['oliveGrey', 'oliveDeep', 'cedar'], bloom: ['geranium', 'jasmine', 'lavender'], bark: 'grey' },
+    japanese: { leaf: ['moss', 'pineDeep', 'bamboo'], bloom: ['blossomPink', 'blossomWhite', 'wisteria'], bark: 'dark' },
+    chinese: { leaf: ['bamboo', 'willow', 'gardenGreen'], bloom: ['blossomPink', 'plum', 'jasmine'], bark: 'warm' },
+    european: { leaf: ['gardenGreen', 'hedge', 'springGreen'], bloom: ['geranium', 'lavender', 'blossomWhite'], bark: 'warm' },
+    greek: { leaf: ['oliveGrey', 'oliveDeep', 'cedar'], bloom: ['jasmine', 'lavender', 'blossomWhite'], bark: 'grey' },
+    moorish: { leaf: ['oliveDeep', 'bamboo', 'moss'], bloom: ['jasmine', 'geranium', 'blossomWhite'], bark: 'pale' },
+    nordic: { leaf: ['pineDeep', 'cedar', 'moss'], bloom: ['blossomWhite', 'lavender'], bark: 'dark' },
+    deco: { leaf: ['box', 'hedge', 'oliveDeep'], bloom: ['mustardBloom', 'plum'], bark: 'grey' },
+    southasian: { leaf: ['bamboo', 'springGreen', 'gardenGreen'], bloom: ['geranium', 'mustardBloom', 'jasmine'], bark: 'warm' }
+  };
+
+  /**
+   * plantColor(rng, mood, species) -> {leaf, deep, bloom, bark, hasBloom}
+   * Species-aware first, family-tinted second: a cypress is dark whoever plants
+   * it, but the flowers around it belong to the family. Pure function of the
+   * rng handed in, so a plan's planting colours are fixed at generate time.
+   */
+  NS.plantColor = function (rng, mood, species) {
+    const sp = SPECIES_FLORA[species] || SPECIES_FLORA.round;
+    const fam = MOOD_FLORA[mood] || MOOD_FLORA.town;
+    const fromSpecies = rng.chance(0.65);
+    const pool = fromSpecies ? sp.leaf : (fam.leaf || sp.leaf);
+    const leafKey = rng.pick(pool) || sp.leaf[0];
+    const leaf = NS.greens[leafKey] || NS.greens.gardenGreen;
+    const bloomKey = rng.pick(fam.bloom || ['blossomWhite']);
+    const hasBloom = rng.chance(sp.bloomP == null ? 0.15 : sp.bloomP);
+    return {
+      leaf: leaf,
+      deep: shade(leaf, 0.78),
+      pale: shade(leaf, 1.14),
+      bloom: hasBloom ? (NS.blooms[bloomKey] || NS.blooms.blossomWhite) : null,
+      bark: NS.barks[sp.bark || fam.bark || 'warm'],
+      hasBloom: hasBloom
+    };
+  };
+
   // --- pen presets ----------------------------------------------------------
   // One pen personality per drawing; tiers only scale it.
   NS.pens = {
@@ -150,17 +270,62 @@
     japanese: {
       label: 'Japanese courtyard',
       massing: { longhouse: 4, lshape: 3.5, cluster: 3, slab: 1.5, tower: 0.3 },
-      roofs: { broadEave: 6, pantile: 2, hipped: 1.5, gabled: 1, flat: 0.4 },
-      facades: { screened: 4, veranda: 3.5, timberFrame: 2.5, grid: 2, solid: 1 },
-      windows: { lattice: 5, timberPane: 2.5, plain: 1.5, ribbon: 0.6, round: 0.8 },
+      roofs: { broadEave: 6, sweptEave: 1.2, pantile: 1.5, hipped: 1.5, gabled: 1, flat: 0.3 },
+      facades: { screened: 4, veranda: 4, timberFrame: 2.5, latticeBay: 1.5, grid: 1.5, solid: 0.8 },
+      windows: { lattice: 5, timberPane: 3, plain: 1.2, ribbon: 0.5, round: 0.8 },
       doors: { plank: 3.5, gateway: 2.5, dbl: 1.5, plain: 1 },
       gear: { finial: 3, chimney: 1, cupola: 0.8, flue: 0.6 },
-      trees: { bamboo: 4, flowering: 3.5, round: 2, bush: 2.5, pine: 2 },
-      ornaments: { brackets: 4, latticeBand: 3, cornice: 1, sunshade: 1.2, pilasters: 0.6 },
+      trees: { bamboo: 4, flowering: 3.5, maple: 3, pine: 2.5, round: 1.5, bush: 2.5 },
+      ornaments: { bracketTier: 3.5, brackets: 3, latticeBand: 3, cornice: 0.8, sunshade: 1.2, pilasters: 0.4 },
       accentBias: { sage: 4, olive: 3, slate: 2, terracotta: 1.5, ochre: 1.2 },
-      detail: { eave: 1, planters: 0.75, windowBox: 0.3, vines: 0.25, groundPlant: 0.85, treeCount: 1.35 },
+      detail: { eave: 1, planters: 0.8, windowBox: 0.3, vines: 0.25, groundPlant: 0.95, treeCount: 1.45 },
       floorHeight: 2.9,
       heightScale: 0.7
+    },
+    chinese: {
+      label: 'Chinese courtyard',
+      massing: { longhouse: 4, lshape: 3.5, cluster: 3.5, slab: 1.5, tower: 0.4 },
+      roofs: { sweptEave: 6, broadEave: 2.5, pantile: 1.5, hipped: 1.2, gabled: 0.5 },
+      facades: { latticeBay: 4.5, screened: 3, veranda: 2.5, colonnade: 1.2, grid: 1.5, solid: 1 },
+      windows: { iceRay: 4.5, lattice: 3.5, round: 1.5, timberPane: 1.2, plain: 0.8 },
+      doors: { moonGate: 3.5, gateway: 3, plank: 2, dbl: 1.2, plain: 0.6 },
+      gear: { finial: 3, cupola: 1.2, chimney: 1, flue: 0.5 },
+      trees: { bamboo: 4, willow: 3.5, flowering: 3, pine: 2.5, bush: 2, round: 1.5 },
+      ornaments: { bracketTier: 4, latticeBand: 3, brackets: 2, cornice: 1, sunshade: 0.8 },
+      accentBias: { terracotta: 3, ochre: 3, olive: 2.5, sage: 2, slate: 1.5 },
+      detail: { eave: 1, planters: 0.8, windowBox: 0.25, vines: 0.3, groundPlant: 0.9, treeCount: 1.4 },
+      floorHeight: 3.0,
+      heightScale: 0.72
+    },
+    european: {
+      label: 'European village',
+      massing: { lshape: 3.5, cluster: 3.5, slab: 3, longhouse: 2.5, tower: 0.8 },
+      roofs: { pantile: 3.5, steepGable: 3, gabled: 3, hipped: 2.5, shed: 0.8, flat: 0.4 },
+      facades: { stuccoBays: 4.5, timberFrame: 3, grid: 2.5, balconyGrid: 2, arcade: 1.5, solid: 1 },
+      windows: { casement: 4.5, shuttered: 3.5, sash: 2.5, timberPane: 2, arched: 1.2, round: 0.4 },
+      doors: { plank: 3, arched: 2.5, plain: 2, dbl: 1.5, storefront: 1 },
+      gear: { chimney: 5, dovecote: 2, flue: 1.5, finial: 1, cupola: 0.8, antenna: 0.4 },
+      trees: { round: 3.5, flowering: 3, bush: 3, maple: 1.5, pine: 1.5, cypress: 0.8 },
+      ornaments: { quoins: 3.5, cornice: 2.5, brackets: 2, pilasters: 1.5, signage: 1.2, sunshade: 0.6 },
+      accentBias: { terracotta: 4, ochre: 3, sage: 2, mustard: 2, slate: 1.5 },
+      detail: { eave: 0.5, planters: 0.7, windowBox: 0.95, vines: 0.5, groundPlant: 0.7, treeCount: 1.2 },
+      floorHeight: 3.0,
+      heightScale: 0.95
+    },
+    greek: {
+      label: 'Greek classical',
+      massing: { longhouse: 4, slab: 3, lshape: 2.5, cluster: 2, tower: 0.3 },
+      roofs: { pediment: 6, hipped: 1.5, pantile: 1.5, gabled: 1, flat: 0.8 },
+      facades: { colonnade: 5, stuccoBays: 2, arcade: 2, grid: 2, solid: 1.2 },
+      windows: { trabeated: 4.5, plain: 2.5, shuttered: 2, arched: 1, round: 0.8 },
+      doors: { pedimentDoor: 4, dbl: 2, plain: 1.5, arched: 1 },
+      gear: { acroterion: 4, finial: 1.5, cupola: 1, chimney: 0.8 },
+      trees: { olive: 4, cypress: 3.5, bush: 2.5, round: 1.5, flowering: 1 },
+      ornaments: { triglyphs: 4, cornice: 3, pilasters: 2.5, brackets: 1, quoins: 0.8 },
+      accentBias: { ochre: 3, slate: 3, terracotta: 2.5, sage: 1.5, olive: 1.5 },
+      detail: { eave: 0.45, planters: 0.6, windowBox: 0.2, vines: 0.3, groundPlant: 0.6, treeCount: 1.1 },
+      floorHeight: 3.4,
+      heightScale: 0.8
     },
     moorish: {
       label: 'Moorish courtyard',
@@ -225,7 +390,8 @@
   };
 
   NS.moodNames = ['town', 'tower', 'industrial', 'mediterranean',
-    'japanese', 'moorish', 'nordic', 'deco', 'southasian'];
+    'japanese', 'chinese', 'european', 'greek',
+    'moorish', 'nordic', 'deco', 'southasian'];
 
   /** Detail knobs, with defaults, for a mood name. Never returns undefined. */
   NS.detailOf = function (mood) {

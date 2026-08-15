@@ -302,11 +302,81 @@
     }
   }
 
+  /** Corner ornament: a small fan of ribs on a plinth, at the roof's edge. */
+  function gearAcroterion(ctx, R, pens, rng, p, g) {
+    const h = g.size * rng.range(1.3, 2.2);
+    const base = R.P(g.x, g.y, g.z);
+    const w = Math.max(1.6, g.size * R.pxPerUnit * 0.34);
+    // plinth
+    S.strokePoly(ctx, pens.detail, [
+      { x: base.x - w, y: base.y }, { x: base.x + w, y: base.y },
+      { x: base.x + w * 0.78, y: base.y - w * 0.7 }, { x: base.x - w * 0.78, y: base.y - w * 0.7 }
+    ], { lod: p.lod, width: 0.85 });
+    const c = { x: base.x, y: base.y - w * 0.7 };
+    const span = Math.max(3, h * R.pxPerUnit * 0.45);
+    const ribs = p.lod >= 0.6 ? rng.int(5, 7) : 3;
+    const tips = [];
+    for (let i = 0; i < ribs; i++) {
+      const a = Math.PI * (0.12 + (0.76 * i) / (ribs - 1));
+      const tip = {
+        x: c.x - Math.cos(a) * span * rng.range(0.75, 1),
+        y: c.y - Math.sin(a) * span * rng.range(0.85, 1.05)
+      };
+      tips.push(tip);
+      S.strokePath(ctx, pens.detail, [
+        c, { x: (c.x + tip.x) / 2 + (tip.x - c.x) * 0.1, y: (c.y + tip.y) / 2 }, tip
+      ], { lod: p.lod, width: 0.8 });
+    }
+    if (p.lod >= 0.65 && tips.length > 2) {
+      S.strokePath(ctx, pens.hair, tips, { lod: p.lod, alpha: 0.7, filament: 0 });
+    }
+  }
+
+  /** Dovecote: a small gabled box lifted on a post, with landing holes. */
+  function gearDovecote(ctx, R, pens, rng, p, g) {
+    const postH = g.size * rng.range(1.4, 2.4);
+    const s = g.size * rng.range(0.9, 1.4);
+    const a = R.P(g.x, g.y, g.z);
+    const b = R.P(g.x, g.y + postH, g.z);
+    S.strokePath(ctx, pens.detail, [{ x: a.x - 1, y: a.y }, { x: b.x - 1, y: b.y }],
+      { lod: p.lod, width: 0.8 });
+    S.strokePath(ctx, pens.detail, [{ x: a.x + 1, y: a.y }, { x: b.x + 1, y: b.y }],
+      { lod: p.lod, width: 0.8 });
+    const boxH = s * rng.range(1, 1.4);
+    const faces = box3(ctx, R, pens, rng, p, {
+      x: g.x - s / 2, z: g.z - s / 2, w: s, d: s, y: g.y + postH, h: boxH
+    }, { width: 0.8 });
+    // little gable over the box
+    const top = R.P(g.x, g.y + postH + boxH, g.z);
+    const apex = { x: top.x, y: top.y - s * R.pxPerUnit * 0.55 };
+    const half = Math.max(2, s * R.pxPerUnit * 0.72);
+    S.strokePath(ctx, pens.detail, [{ x: top.x - half, y: top.y }, apex], { lod: p.lod, width: 0.85 });
+    S.strokePath(ctx, pens.detail, [{ x: top.x + half, y: top.y }, apex], { lod: p.lod, width: 0.85 });
+    if (p.lod < 0.6) return;
+    // holes and a landing ledge on whichever side faces the viewer
+    let front = null;
+    for (let i = 0; i < faces.length; i++) {
+      if (faces[i].dir === 'top') continue;
+      if (!front || faces[i].fv > front.fv) front = faces[i];
+    }
+    if (!front) return;
+    const n = rng.int(2, 3);
+    for (let i = 0; i < n; i++) {
+      const c = S.quadPt(front.q, (i + 1) / (n + 1), 0.62);
+      S.strokeEllipse(ctx, pens.hair, c.x, c.y, 1.5, 1.7, { lod: p.lod });
+    }
+    S.strokePath(ctx, pens.hair,
+      [S.quadPt(front.q, -0.1, 0.34), S.quadPt(front.q, 1.1, 0.34)],
+      { lod: p.lod, alpha: 0.85 });
+  }
+
   NS.gear = {
     chimney: gearChimney, flue: gearFlue, antenna: gearAntenna, tank: gearTank,
-    finial: gearFinial, cupola: gearCupola, spire: gearSpire
+    finial: gearFinial, cupola: gearCupola, spire: gearSpire,
+    acroterion: gearAcroterion, dovecote: gearDovecote
   };
-  NS.gearNames = ['chimney', 'flue', 'antenna', 'tank', 'finial', 'cupola', 'spire'];
+  NS.gearNames = ['chimney', 'flue', 'antenna', 'tank', 'finial', 'cupola', 'spire',
+    'acroterion', 'dovecote'];
   NS.box3 = box3;
 
   // --- ornament -------------------------------------------------------------
@@ -443,24 +513,119 @@
     });
   }
 
+  /** Alternating corner blocks — the rendered wall's dressed edges. */
+  function ornQuoins(ctx, frame, pens, rng, p, o) {
+    AD.facade.quoins(ctx, frame, pens, rng, p, { w: (o && o.w) || 0.05 });
+  }
+
+  /** Frieze band: grooved blocks alternating with plain fields, guttae under. */
+  function ornTriglyphs(ctx, frame, pens, rng, p, o) {
+    const v = o && o.v != null ? o.v : 0.9;
+    const h = o && o.h != null ? o.h : 0.055;
+    S.strokePath(ctx, pens.detail, [frame.pt(-0.02, v + h), frame.pt(1.02, v + h)],
+      { lod: p.lod, width: 0.95 });
+    S.strokePath(ctx, pens.detail, [frame.pt(-0.02, v), frame.pt(1.02, v)],
+      { lod: p.lod, width: 0.85 });
+    if (p.lod < 0.55) return;
+    const n = Math.max(3, Math.min(14, Math.round(frame.pxWidth / 28)));
+    const cell = 0.96 / n;
+    for (let i = 0; i < n; i++) {
+      const uc = 0.02 + cell * (i + 0.5);
+      const bw = cell * 0.2;
+      const q = frame.quad(uc - bw, v + 0.004, uc + bw, v + h - 0.004);
+      if (!S.quadOk(q)) continue;
+      S.strokePoly(ctx, pens.hair, q, { lod: p.lod, width: 0.8 });
+      if (p.lod >= 0.68) {
+        [0.34, 0.66].forEach(function (u) {
+          S.strokePath(ctx, pens.hair, [Q(q, u, 0.06), Q(q, u, 0.94)], { lod: p.lod, alpha: 0.8 });
+        });
+        // guttae hanging under the block
+        for (let k = 0; k < 3; k++) {
+          const u = uc + (k - 1) * bw * 0.7;
+          S.strokePath(ctx, pens.hair, [frame.pt(u, v), frame.pt(u, v - 0.014)],
+            { lod: p.lod, alpha: 0.75 });
+        }
+      }
+    }
+  }
+
+  /** Stacked bracket blocks stepping out under the eave. */
+  function ornBracketTier(ctx, frame, pens, rng, p, o) {
+    const v = o && o.v != null ? o.v : 0.9;
+    const n = Math.max(2, Math.min(10, Math.round(frame.pxWidth / 34)));
+    const tiers = p.lod >= 0.7 ? 3 : 2;
+    S.strokePath(ctx, pens.detail, [frame.pt(-0.02, v + 0.052), frame.pt(1.02, v + 0.052)],
+      { lod: p.lod, width: 0.95 });
+    if (p.lod < 0.5) return;
+    for (let i = 0; i <= n; i++) {
+      const u = 0.03 + (0.94 * i) / n;
+      // the post the cluster sits on
+      S.strokePath(ctx, pens.detail, [frame.pt(u, v - 0.03), frame.pt(u, v)],
+        { lod: p.lod, width: 0.8 });
+      for (let k = 0; k < tiers; k++) {
+        const half = 0.012 + 0.011 * k;
+        const vv = v + 0.017 * k;
+        const a = frame.pt(u - half, vv), b = frame.pt(u + half, vv);
+        S.strokePath(ctx, pens.hair, [a, b], { lod: p.lod, alpha: 0.9 });
+        if (p.lod >= 0.72 && k < tiers - 1) {
+          S.strokePath(ctx, pens.hair, [a, frame.pt(u - half - 0.006, vv + 0.017)],
+            { lod: p.lod, alpha: 0.7 });
+          S.strokePath(ctx, pens.hair, [b, frame.pt(u + half + 0.006, vv + 0.017)],
+            { lod: p.lod, alpha: 0.7 });
+        }
+      }
+    }
+  }
+
   NS.ornament = {
     cornice: ornCornice, pilasters: ornPilasters, signage: ornSignage, ac: ornAC,
     chevrons: ornChevrons, brackets: ornBrackets, sunshade: ornSunshade,
-    latticeBand: ornLatticeBand
+    latticeBand: ornLatticeBand, quoins: ornQuoins, triglyphs: ornTriglyphs,
+    bracketTier: ornBracketTier
   };
   NS.ornamentNames = ['cornice', 'pilasters', 'signage', 'ac',
-    'chevrons', 'brackets', 'sunshade', 'latticeBand'];
+    'chevrons', 'brackets', 'sunshade', 'latticeBand',
+    'quoins', 'triglyphs', 'bracketTier'];
 
   // --- vegetation on buildings ---------------------------------------------
+  // Planting colour is decided once per building (building.js forks a flora
+  // stream and stores the result in the plan), then handed down in p.flora, so
+  // every box and climber on the sheet belongs to the same garden. Fills are
+  // translucent and always laid under the ink; the drawing is still the line.
+  function leafOf(p) { return (p.flora && p.flora.leaf) || p.vegAccent || null; }
+  function deepOf(p) { return (p.flora && p.flora.deep) || p.vegAccent || null; }
+  function bloomOf(p) { return (p.flora && p.flora.bloom) || null; }
+  function alphas() { return AD.style.floraAlpha; }
+
+  /** A handful of flower dabs inside a quad: colour first, hairline after. */
+  function bloomDabs(ctx, q, pens, rng, p, n) {
+    const col = bloomOf(p);
+    if (!col || p.lod < 0.65 || !S.quadOk(q)) return;
+    for (let i = 0; i < n; i++) {
+      const c = Q(q, rng.range(0.08, 0.92), rng.range(0.15, 0.9));
+      const r = rng.range(1.1, 2.2);
+      S.polyFill(ctx, [
+        { x: c.x - r, y: c.y }, { x: c.x, y: c.y - r },
+        { x: c.x + r, y: c.y }, { x: c.x, y: c.y + r }
+      ], col, alphas().bloom);
+      S.strokeEllipse(ctx, pens.hair, c.x, c.y, r * 0.8, r * 0.7, { lod: p.lod, alpha: 0.7 });
+    }
+  }
+
   function vegWindowBox(ctx, q, pens, rng, p) {
     if (!S.quadOk(q)) return;
     const box = S.subQuad(q, 0.05, -0.02, 0.95, 0.28);
-    if (p.vegAccent) S.accentFill(ctx, box, p.vegAccent, rng, { alpha: 0.3 });
+    if (p.trimAccent) S.accentFill(ctx, box, p.trimAccent, rng, { alpha: 0.22 });
+    else if (p.vegAccent) S.accentFill(ctx, box, p.vegAccent, rng, { alpha: 0.2 });
     S.strokePoly(ctx, pens.hair, box, { lod: p.lod });
     if (p.lod < 0.6) return;
+    const foliage = S.subQuad(q, 0.05, 0.1, 0.95, 0.44);
+    const leaf = leafOf(p);
+    if (leaf && S.quadOk(foliage)) S.polyFill(ctx, foliage, leaf, alphas().canopy);
     S.scribbleFill(ctx, pens.hair, S.subQuad(q, 0.05, 0.12, 0.95, 0.42), {
       density: Math.round(rng.range(5, 11)), lod: p.lod, width: 0.9, alpha: 0.9
     });
+    bloomDabs(ctx, foliage, pens, rng, p, rng.int(2, 4));
   }
 
   function vegVine(ctx, frame, pens, rng, p, o) {
@@ -476,20 +641,31 @@
     }
     S.strokePath(ctx, pens.detail, pts, { lod: p.lod, width: 0.8 });
     if (p.lod < 0.6) return;
+    const leafCol = leafOf(p);
+    const deepCol = deepOf(p);
+    const bloom = bloomOf(p);
     const leaves = Math.round(rng.range(4, 10));
     for (let i = 0; i < leaves; i++) {
       const t = rng.range(0.05, 0.98);
       const idx = Math.min(pts.length - 1, Math.floor(t * pts.length));
       const c = pts[idx];
       const r = rng.range(2.2, 5);
-      if (p.vegAccent) {
+      const col = rng.chance(0.3) ? deepCol : leafCol;
+      if (col) {
         S.polyFill(ctx, [
           { x: c.x - r, y: c.y - r }, { x: c.x + r, y: c.y - r },
           { x: c.x + r, y: c.y + r }, { x: c.x - r, y: c.y + r }
-        ], p.vegAccent, 0.22);
+        ], col, alphas().canopy * 0.85);
       }
       S.strokeEllipse(ctx, pens.hair, c.x + rng.range(-r, r), c.y + rng.range(-r, r),
         r * 0.7, r * 0.5, { lod: p.lod, rotation: rng.range(0, Math.PI) });
+      if (bloom && p.lod >= 0.7 && rng.chance(0.35)) {
+        const bx = c.x + rng.range(-r, r), by = c.y + rng.range(-r, r);
+        S.polyFill(ctx, [
+          { x: bx - 1.6, y: by }, { x: bx, y: by - 1.6 },
+          { x: bx + 1.6, y: by }, { x: bx, y: by + 1.6 }
+        ], bloom, alphas().bloom);
+      }
     }
   }
 
@@ -512,10 +688,12 @@
         Q(q, u - w * 0.25, 0.28), Q(q, u + w * 1.25, 0.28),
         Q(q, u + w * 1.1, 0.85), Q(q, u - w * 0.1, 0.85)
       ];
-      if (p.vegAccent) S.accentFill(ctx, leaf, p.vegAccent, rng, { alpha: 0.26 });
+      const col = leafOf(p);
+      if (col && S.quadOk(leaf)) S.polyFill(ctx, leaf, col, alphas().canopy);
       S.scribbleFill(ctx, pens.hair, leaf, {
         density: Math.round(rng.range(5, 10)), lod: p.lod, width: 0.85, alpha: 0.85
       });
+      bloomDabs(ctx, leaf, pens, rng, p, rng.int(1, 3));
     }
   }
 
@@ -538,10 +716,12 @@
     }
     if (p.lod < 0.6) return;
     const leafy = S.subQuad(q, 0.02, 0.02, 0.98, rng.range(0.55, 0.95));
-    if (p.vegAccent) S.accentFill(ctx, leafy, p.vegAccent, rng, { alpha: 0.24 });
+    const col = leafOf(p);
+    if (col && S.quadOk(leafy)) S.polyFill(ctx, leafy, col, alphas().canopy * 0.9);
     S.scribbleFill(ctx, pens.hair, leafy, {
       density: Math.round(rng.range(7, 14)), lod: p.lod, width: 0.85, alpha: 0.8
     });
+    bloomDabs(ctx, leafy, pens, rng, p, rng.int(2, 5));
   }
 
   NS.vegetation = {

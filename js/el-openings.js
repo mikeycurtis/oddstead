@@ -350,6 +350,134 @@
     sill(ctx, q, pens, rng, p);
   }
 
+  // --- ice-ray lattice ------------------------------------------------------
+  // An irregular net of struts spanning the opening, sometimes set inside a
+  // circular frame. A garden-pavilion cue: geometric, never figurative.
+  function windowIceRay(ctx, q, pens, rng, p) {
+    if (tiny(q, 7)) { windowLattice(ctx, q, pens, rng, p); return; }
+    const circular = rng.chance(0.35);
+    const inner = sub(q, 0.09, 0.08, 0.91, 0.92);
+    if (p.glassAccent) S.accentFill(ctx, inner, p.glassAccent, rng, { alpha: 0.18 });
+    S.strokePoly(ctx, pens.detail, q, { lod: p.lod });
+    if (p.lod >= 0.45) S.strokePoly(ctx, pens.hair, inner, { lod: p.lod, alpha: 0.85 });
+    if (circular && p.lod >= 0.5) {
+      const c = Q(inner, 0.5, 0.5);
+      const rx = Math.hypot(Q(inner, 1, 0.5).x - Q(inner, 0, 0.5).x,
+        Q(inner, 1, 0.5).y - Q(inner, 0, 0.5).y) / 2;
+      const ry = Math.hypot(Q(inner, 0.5, 1).x - Q(inner, 0.5, 0).x,
+        Q(inner, 0.5, 1).y - Q(inner, 0.5, 0).y) / 2;
+      S.strokeEllipse(ctx, pens.detail, c.x, c.y, rx * 0.96, ry * 0.96, { lod: p.lod });
+    }
+    if (p.lod < 0.55) return;
+
+    // a point at parameter t around the opening's perimeter (t in [0, 4))
+    const edge = function (t) {
+      const e = ((Math.floor(t) % 4) + 4) % 4;
+      const f = t - Math.floor(t);
+      if (e === 0) return Q(inner, f, 0);
+      if (e === 1) return Q(inner, 1, f);
+      if (e === 2) return Q(inner, 1 - f, 1);
+      return Q(inner, 0, 1 - f);
+    };
+    const struts = rng.int(4, 7);
+    const mids = [];
+    for (let i = 0; i < struts; i++) {
+      const t0 = rng.range(0, 4);
+      const t1 = t0 + rng.range(1.15, 2.6);
+      const a = edge(t0), b = edge(t1);
+      S.strokePath(ctx, pens.hair, [a, b], { lod: p.lod, alpha: 0.9, filament: 0 });
+      mids.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    }
+    // short connectors knitting the struts into a cracked-ice net
+    if (p.lod < 0.7) return;
+    for (let i = 1; i < mids.length; i++) {
+      if (!rng.chance(0.65)) continue;
+      S.strokePath(ctx, pens.hair, [mids[i - 1], mids[i]], { lod: p.lod, alpha: 0.75, filament: 0 });
+    }
+  }
+
+  // --- casement with folded-back shutters -----------------------------------
+  function windowCasement(ctx, q, pens, rng, p) {
+    if (tiny(q, 7)) { windowShuttered(ctx, q, pens, rng, p); return; }
+    const sw = rng.range(0.15, 0.23);
+    const core = sub(q, sw, 0.03, 1 - sw, 0.96);
+    glass(ctx, core, pens, rng, p);
+    S.strokePoly(ctx, pens.detail, core, { lod: p.lod });
+    // transom over a pair of casements
+    const vT = rng.range(0.68, 0.78);
+    S.strokePath(ctx, pens.detail, [Q(core, -0.02, vT), Q(core, 1.02, vT)],
+      { lod: p.lod, width: 0.75 });
+    S.strokePath(ctx, pens.detail, [Q(core, 0.5, 0), Q(core, 0.5, vT)],
+      { lod: p.lod, width: 0.72 });
+    if (p.lod >= 0.6) {
+      S.strokePath(ctx, pens.hair, [Q(core, 0.02, vT * 0.5), Q(core, 0.98, vT * 0.5)],
+        { lod: p.lod, alpha: 0.8 });
+    }
+    // the shutters, folded flat against the wall either side
+    [[0, sw], [1 - sw, 1]].forEach(function (uu, i) {
+      const leaf = sub(q, uu[0], 0.02, uu[1], 0.97);
+      if (!S.quadOk(leaf)) return;
+      if (p.trimAccent && p.lod >= 0.5) S.accentFill(ctx, leaf, p.trimAccent, rng, { alpha: 0.2 });
+      S.strokePoly(ctx, pens.detail, leaf, { lod: p.lod, width: 0.85 });
+      if (p.lod >= 0.55) {
+        S.hatchQuad(ctx, pens.hatch, sub(leaf, 0.12, 0.06, 0.88, 0.94), {
+          angle: 0.02, gap: 0.16, lod: p.lod, max: 7, alpha: 0.7
+        });
+        S.strokePath(ctx, pens.hair, [Q(leaf, 0.05, 0.5), Q(leaf, 0.95, 0.5)], { lod: p.lod });
+      }
+      if (p.lod >= 0.7) {
+        // hinge pins on the outer stile
+        const u = i === 0 ? -0.06 : 1.06;
+        [0.2, 0.8].forEach(function (v) {
+          S.strokePath(ctx, pens.hair, [Q(leaf, i === 0 ? 0 : 1, v), Q(leaf, u, v)],
+            { lod: p.lod, alpha: 0.85 });
+        });
+      }
+    });
+    // deep sill on two brackets
+    const shelf = [Q(q, -0.16, -0.1), Q(q, 1.16, -0.1), Q(q, 1.1, 0.02), Q(q, -0.1, 0.02)];
+    S.strokePoly(ctx, pens.detail, shelf, { lod: p.lod, width: 0.9 });
+    if (p.lod >= 0.65) {
+      [0.12, 0.88].forEach(function (u) {
+        S.strokePath(ctx, pens.hair, [Q(q, u, -0.1), Q(q, u < 0.5 ? u + 0.06 : u - 0.06, -0.19)],
+          { lod: p.lod, alpha: 0.8 });
+      });
+    }
+  }
+
+  // --- trabeated: heavy lintel on slightly tapering jambs -------------------
+  function windowTrabeated(ctx, q, pens, rng, p) {
+    if (tiny(q, 6)) { windowPlain(ctx, q, pens, rng, p); return; }
+    const taper = rng.range(0.03, 0.075);
+    const vHead = rng.range(0.82, 0.88);
+    const opening = [
+      Q(q, 0.04, 0), Q(q, 0.96, 0),
+      Q(q, 0.96 - taper, vHead), Q(q, 0.04 + taper, vHead)
+    ];
+    if (!S.quadOk(opening)) { windowPlain(ctx, q, pens, rng, p); return; }
+    if (p.glassAccent && p.lod >= 0.5) S.accentFill(ctx, opening, p.glassAccent, rng, { alpha: 0.22 });
+    if (p.lod >= 0.55) {
+      S.hatchQuad(ctx, pens.hatch, S.subQuad(opening, 0.06, 0.45, 0.94, 0.94), {
+        angle: -0.95, gap: 0.28, lod: p.lod, alpha: 0.5, max: 5
+      });
+    }
+    S.strokePoly(ctx, pens.detail, opening, { lod: p.lod });
+    // lintel block, oversailing both jambs, with a fillet under it
+    const lintel = [Q(q, -0.14, vHead), Q(q, 1.14, vHead), Q(q, 1.12, 1.02), Q(q, -0.12, 1.02)];
+    if (p.trimAccent && p.lod >= 0.5) S.accentFill(ctx, lintel, p.trimAccent, rng, { alpha: 0.2 });
+    S.strokePoly(ctx, pens.detail, lintel, { lod: p.lod, width: 0.95 });
+    if (p.lod >= 0.6) {
+      S.strokePath(ctx, pens.hair, [Q(q, -0.12, vHead + 0.05), Q(q, 1.12, vHead + 0.05)],
+        { lod: p.lod, alpha: 0.8 });
+    }
+    // sill block
+    const sillQ = [Q(q, -0.12, -0.09), Q(q, 1.12, -0.09), Q(q, 1.06, 0.01), Q(q, -0.06, 0.01)];
+    S.strokePoly(ctx, pens.detail, sillQ, { lod: p.lod, width: 0.9 });
+    if (p.lod >= 0.7 && rng.chance(0.5)) {
+      S.strokePath(ctx, pens.hair, [Q(q, -0.06, -0.13), Q(q, 1.06, -0.13)], { lod: p.lod, alpha: 0.7 });
+    }
+  }
+
   NS.windows = {
     plain: windowPlain,
     sash: windowSash,
@@ -361,10 +489,14 @@
     horseshoe: windowHorseshoe,
     decoBay: windowDecoBay,
     hooded: windowHooded,
-    timberPane: windowTimberPane
+    timberPane: windowTimberPane,
+    iceRay: windowIceRay,
+    casement: windowCasement,
+    trabeated: windowTrabeated
   };
   NS.windowNames = ['plain', 'sash', 'arched', 'shuttered', 'round', 'ribbon',
-    'lattice', 'horseshoe', 'decoBay', 'hooded', 'timberPane'];
+    'lattice', 'horseshoe', 'decoBay', 'hooded', 'timberPane',
+    'iceRay', 'casement', 'trabeated'];
 
   // --- doors ----------------------------------------------------------------
 
@@ -552,6 +684,107 @@
     stepTicks(ctx, q, pens, rng, p);
   }
 
+  // --- circular garden opening ---------------------------------------------
+  // A round doorway cut clean through a garden wall, with a rolled surround and
+  // a paved threshold. Geometry only — no motifs, no symbols.
+  function doorMoonGate(ctx, q, pens, rng, p) {
+    if (tiny(q, 9)) { doorArched(ctx, q, pens, rng, p); return; }
+    const size = S.quadSize(q);
+    // the opening is a true circle on the wall, so take the smaller dimension
+    const m = Math.min(size.w, size.h) * rng.range(0.9, 0.99);
+    const fu = Math.min(1, m / Math.max(1e-6, size.w));
+    const fv = Math.min(1, m / Math.max(1e-6, size.h));
+    const v0 = 0.02;
+    const sq = sub(q, 0.5 - fu / 2, v0, 0.5 + fu / 2, Math.min(1, v0 + fv));
+    if (!S.quadOk(sq)) { doorArched(ctx, q, pens, rng, p); return; }
+    const c = Q(sq, 0.5, 0.5);
+    const rx = Math.hypot(Q(sq, 1, 0.5).x - Q(sq, 0, 0.5).x,
+      Q(sq, 1, 0.5).y - Q(sq, 0, 0.5).y) / 2;
+    const ry = Math.hypot(Q(sq, 0.5, 1).x - Q(sq, 0.5, 0).x,
+      Q(sq, 0.5, 1).y - Q(sq, 0.5, 0).y) / 2;
+
+    if (p.doorAccent && p.lod >= 0.5) {
+      S.accentFill(ctx, sub(sq, 0.2, 0.08, 0.8, 0.6), p.doorAccent, rng, { alpha: 0.22 });
+    }
+    if (p.lod >= 0.5) {
+      // the shade of the garden beyond, sitting low in the opening
+      S.hatchQuad(ctx, pens.hatch, sub(sq, 0.18, 0.06, 0.82, 0.5), {
+        angle: -1.1, gap: 0.22, lod: p.lod, alpha: 0.45, max: 7
+      });
+    }
+    S.strokeEllipse(ctx, pens.detail, c.x, c.y, rx * 0.94, ry * 0.94, { lod: p.lod });
+    S.strokeEllipse(ctx, pens.detail, c.x, c.y, rx, ry, { lod: p.lod, width: 0.85 });
+    if (p.lod >= 0.6) {
+      // a rolled surround band, and the two wall panels it cuts through
+      S.strokeEllipse(ctx, pens.hair, c.x, c.y, rx * 1.08, ry * 1.08,
+        { lod: p.lod, alpha: 0.7 });
+      S.strokePath(ctx, pens.hair, [Q(q, 0.02, 0.02), Q(q, 0.02, 0.9)], { lod: p.lod, alpha: 0.7 });
+      S.strokePath(ctx, pens.hair, [Q(q, 0.98, 0.02), Q(q, 0.98, 0.9)], { lod: p.lod, alpha: 0.7 });
+    }
+    // threshold: a stone sill under the opening plus a few paving joints
+    S.strokePath(ctx, pens.detail, [Q(q, -0.1, 0.01), Q(q, 1.1, 0.01)], { lod: p.lod, width: 0.9 });
+    if (p.lod >= 0.6) {
+      const n = rng.int(2, 4);
+      for (let i = 1; i <= n; i++) {
+        const u = i / (n + 1);
+        S.strokePath(ctx, pens.hair, [Q(q, u, 0.01), Q(q, u + rng.range(-0.04, 0.04), -0.05)],
+          { lod: p.lod, alpha: 0.65 });
+      }
+    }
+    stepTicks(ctx, q, pens, rng, p);
+  }
+
+  // --- doorway under a small pediment on pilasters --------------------------
+  function doorPediment(ctx, q, pens, rng, p) {
+    if (tiny(q, 8)) { doorDouble(ctx, q, pens, rng, p); return; }
+    const vHead = rng.range(0.68, 0.76);
+    const leaf = sub(q, 0.18, 0, 0.82, vHead - 0.03);
+    if (p.doorAccent) S.accentFill(ctx, leaf, p.doorAccent, rng, {});
+    S.strokePoly(ctx, pens.detail, leaf, { lod: p.lod });
+    S.strokePath(ctx, pens.detail, [Q(leaf, 0.5, 0), Q(leaf, 0.5, 1)], { lod: p.lod, width: 0.75 });
+    if (p.lod >= 0.6) {
+      [[0.06, 0.46], [0.54, 0.94]].forEach(function (uu) {
+        S.strokePoly(ctx, pens.hair, S.subQuad(leaf, uu[0], 0.55, uu[1], 0.92), { lod: p.lod });
+        S.strokePoly(ctx, pens.hair, S.subQuad(leaf, uu[0], 0.08, uu[1], 0.45), { lod: p.lod });
+      });
+    }
+    // flanking pilasters, each with a capital and a base block
+    [[0.03, 0.15], [0.85, 0.97]].forEach(function (uu) {
+      const pil = sub(q, uu[0], 0, uu[1], vHead);
+      if (!S.quadOk(pil)) return;
+      S.strokePath(ctx, pens.detail, [Q(pil, 0, 0), Q(pil, 0, 1)], { lod: p.lod, width: 0.85 });
+      S.strokePath(ctx, pens.detail, [Q(pil, 1, 0), Q(pil, 1, 1)], { lod: p.lod, width: 0.85 });
+      if (p.lod >= 0.6) {
+        S.strokePoly(ctx, pens.hair, S.subQuad(pil, -0.3, 0.93, 1.3, 1), { lod: p.lod });
+        S.strokePoly(ctx, pens.hair, S.subQuad(pil, -0.25, 0, 1.25, 0.05), { lod: p.lod });
+        S.strokePath(ctx, pens.hair, [Q(pil, 0.5, 0.08), Q(pil, 0.5, 0.9)], { lod: p.lod, alpha: 0.55 });
+      }
+    });
+    // entablature band, then the pediment sitting on it
+    const band = [Q(q, -0.06, vHead), Q(q, 1.06, vHead), Q(q, 1.06, vHead + 0.06), Q(q, -0.06, vHead + 0.06)];
+    if (p.trimAccent && p.lod >= 0.5) S.accentFill(ctx, band, p.trimAccent, rng, { alpha: 0.2 });
+    S.strokePoly(ctx, pens.detail, band, { lod: p.lod, width: 0.9 });
+    const apex = Q(q, 0.5, 1.0);
+    const bl = Q(q, -0.08, vHead + 0.06), br = Q(q, 1.08, vHead + 0.06);
+    S.strokePath(ctx, pens.detail, [bl, apex], { lod: p.lod, width: 0.95 });
+    S.strokePath(ctx, pens.detail, [br, apex], { lod: p.lod, width: 0.95 });
+    if (p.lod >= 0.6) {
+      const inset = function (a) {
+        return { x: a.x + ((bl.x + br.x + apex.x) / 3 - a.x) * 0.22,
+          y: a.y + ((bl.y + br.y + apex.y) / 3 - a.y) * 0.22 };
+      };
+      S.strokePath(ctx, pens.hair, [inset(bl), inset(apex), inset(br)],
+        { lod: p.lod, alpha: 0.8, filament: 0 });
+      const n = rng.int(4, 8);
+      for (let i = 1; i < n; i++) {
+        const u = i / n;
+        S.strokePath(ctx, pens.hair, [Q(q, u, vHead + 0.005), Q(q, u, vHead + 0.03)],
+          { lod: p.lod, alpha: 0.75 });
+      }
+    }
+    stepTicks(ctx, q, pens, rng, p);
+  }
+
   NS.doors = {
     plain: doorPlain,
     arched: doorArched,
@@ -559,9 +792,12 @@
     storefront: doorStorefront,
     gateway: doorGateway,
     plank: doorPlank,
-    decoPortal: doorDecoPortal
+    decoPortal: doorDecoPortal,
+    moonGate: doorMoonGate,
+    pedimentDoor: doorPediment
   };
-  NS.doorNames = ['plain', 'arched', 'dbl', 'storefront', 'gateway', 'plank', 'decoPortal'];
+  NS.doorNames = ['plain', 'arched', 'dbl', 'storefront', 'gateway', 'plank',
+    'decoPortal', 'moonGate', 'pedimentDoor'];
   NS.uvArc = uvArc;
   NS.uvHorseshoe = uvHorseshoe;
   NS.uvPointed = uvPointed;

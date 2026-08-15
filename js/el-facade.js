@@ -465,6 +465,124 @@
     upperFloors(ctx, frame, pens, rng, p, cfg, L, storeys);
   }
 
+  /** Alternating corner blocks up both edges of a wall. */
+  function quoins(ctx, frame, pens, rng, p, opts) {
+    opts = opts || {};
+    const w = opts.w == null ? 0.05 : opts.w;
+    const n = clamp(Math.round(frame.pxHeight / 24), 3, 14);
+    for (let i = 0; i < n; i++) {
+      const v0 = 0.015 + (0.955 * i) / n;
+      const v1 = 0.015 + (0.955 * (i + 1)) / n - 0.004;
+      const ww = i % 2 === 0 ? w : w * 0.6;
+      [[0.006, 0.006 + ww], [0.994 - ww, 0.994]].forEach(function (uu) {
+        const q = frame.quad(uu[0], v0, uu[1], v1);
+        if (!S.quadOk(q)) return;
+        S.strokePoly(ctx, pens.hair, q, { lod: p.lod, width: 0.85, alpha: 0.9 });
+      });
+    }
+  }
+
+  // --- new systems, second wave --------------------------------------------
+
+  /** Timber bay divisions: panelled dado, glazed middle, lattice transom band. */
+  function facadeLatticeBay(ctx, frame, pens, rng, p, cfg) {
+    const L = layout(cfg);
+    const postW = 0.014;
+    for (let r = 0; r < L.rows; r++) {
+      const v0 = L.v0(r), v1 = v0 + L.bandH;
+      // head and sill beams for the storey
+      S.strokePath(ctx, pens.detail, [frame.pt(0.02, v1 - L.bandH * 0.03), frame.pt(0.98, v1 - L.bandH * 0.03)],
+        { lod: p.lod, width: 0.95 });
+      S.strokePath(ctx, pens.detail, [frame.pt(0.03, v0 + L.bandH * 0.02), frame.pt(0.97, v0 + L.bandH * 0.02)],
+        { lod: p.lod, width: 0.8 });
+
+      for (let c = 0; c <= L.cols; c++) {
+        const u = clamp(L.u0(c), 0.02, 0.98);
+        const q = frame.quad(u - postW / 2, v0 + L.bandH * 0.02, u + postW / 2, v1 - L.bandH * 0.03);
+        if (!S.quadOk(q)) continue;
+        if (p.trimAccent && p.lod >= 0.5) S.accentFill(ctx, q, p.trimAccent, rng, { alpha: 0.2 });
+        S.strokePath(ctx, pens.detail, [S.quadPt(q, 0, 0), S.quadPt(q, 0, 1)], { lod: p.lod, width: 0.85 });
+        S.strokePath(ctx, pens.detail, [S.quadPt(q, 1, 0), S.quadPt(q, 1, 1)], { lod: p.lod, width: 0.85 });
+        if (p.lod >= 0.62) {
+          // short braces easing the post into the beam
+          S.strokePath(ctx, pens.hair,
+            [S.quadPt(q, 0, 0.9), S.quadPt(q, -2.2, 0.99)], { lod: p.lod, alpha: 0.85 });
+          S.strokePath(ctx, pens.hair,
+            [S.quadPt(q, 1, 0.9), S.quadPt(q, 3.2, 0.99)], { lod: p.lod, alpha: 0.85 });
+        }
+      }
+
+      const variant = (r === L.rows - 1 && cfg.altWin) ? cfg.altWin : cfg.win;
+      for (let c = 0; c < L.cols; c++) {
+        const isDoor = r === 0 && cfg.hasDoor && c === cfg.doorBay;
+        const u0 = L.u0(c) + postW, u1 = L.u0(c) + L.cellW - postW;
+        // lattice transom band across the head of the bay
+        const tq = frame.quad(u0, v0 + L.bandH * 0.72, u1, v0 + L.bandH * 0.94);
+        if (S.quadOk(tq)) {
+          latticePanel(ctx, tq, pens, rng, p, {
+            diagonal: cfg.screenDiagonal, accent: p.glassAccent, rows: 1,
+            cols: clamp(Math.round(S.quadSize(tq).w / 9), 2, 8), width: 0.75
+          });
+        }
+        if (isDoor) continue;
+        // panelled dado under the opening
+        const dq = frame.quad(u0, v0 + L.bandH * 0.04, u1, v0 + L.bandH * 0.24);
+        if (S.quadOk(dq) && p.lod >= 0.5) {
+          S.strokePoly(ctx, pens.hair, dq, { lod: p.lod, width: 0.8 });
+          S.hatchQuad(ctx, pens.hatch, S.subQuad(dq, 0.06, 0.12, 0.94, 0.88), {
+            angle: 1.5, gap: 0.24, lod: p.lod, alpha: 0.35, max: 5
+          });
+        }
+        const wq = frame.quad(u0, v0 + L.bandH * 0.27, u1, v0 + L.bandH * 0.69);
+        if (!S.quadOk(wq)) continue;
+        (OP.windows[variant] || OP.windows.lattice)(ctx, wq, pens, rng, p);
+      }
+    }
+    if (cfg.hasDoor) drawDoor(ctx, frame, pens, rng, p, cfg, L);
+  }
+
+  /** Plastered wall: quoined corners, string courses, shuttered bays. */
+  function facadeStuccoBays(ctx, frame, pens, rng, p, cfg) {
+    const L = layout(cfg);
+    if (p.lod >= 0.5) quoins(ctx, frame, pens, rng, p, { w: 0.045 });
+    // a faint float texture, well under the line work
+    if (p.lod >= 0.7 && rng.chance(0.7)) {
+      S.hatchQuad(ctx, pens.hatch, frame.quad(0.08, 0.04, 0.92, 0.96), {
+        angle: cfg.hatchAngle, gap: 0.26, lod: p.lod, alpha: 0.16, max: 6
+      });
+    }
+    for (let r = 0; r < L.rows; r++) {
+      const variant = (r === L.rows - 1 && cfg.altWin) ? cfg.altWin : cfg.win;
+      for (let c = 0; c < L.cols; c++) {
+        if (r === 0 && cfg.hasDoor && c === cfg.doorBay) continue;
+        if (cfg.skip && rng.chance(cfg.skip)) continue;
+        const wu = cfg.winW, wv = cfg.winH;
+        const u0 = L.u0(c) + L.cellW * (1 - wu) * 0.5;
+        const v0 = L.v0(r) + L.bandH * (1 - wv) * 0.45;
+        const q = frame.quad(u0, v0, u0 + L.cellW * wu, v0 + L.bandH * wv);
+        if (!S.quadOk(q)) continue;
+        // rendered surround standing slightly proud of the wall
+        if (p.lod >= 0.6) {
+          S.strokePoly(ctx, pens.hair, S.subQuad(q, -0.16, -0.06, 1.16, 1.12),
+            { lod: p.lod, width: 0.8, alpha: 0.85 });
+        }
+        (OP.windows[variant] || OP.windows.shuttered)(ctx, q, pens, rng, p);
+        if (cfg.windowBoxP && p.lod >= 0.65 && r > 0 && rng.chance(cfg.windowBoxP)) {
+          AD.details.vegetation.windowBox(ctx, q, pens, rng, p);
+        }
+      }
+      // string course between the storeys
+      if (r > 0 && p.lod >= 0.5) {
+        const v = L.v0(r) - L.bandH * 0.04;
+        S.strokePath(ctx, pens.detail, [frame.pt(0.01, v), frame.pt(0.99, v)],
+          { lod: p.lod, width: 0.85 });
+        S.strokePath(ctx, pens.hair, [frame.pt(0.02, v - 0.012), frame.pt(0.98, v - 0.012)],
+          { lod: p.lod, alpha: 0.7 });
+      }
+    }
+    if (cfg.hasDoor) drawDoor(ctx, frame, pens, rng, p, cfg, L);
+  }
+
   NS.systems = {
     grid: facadeGrid,
     arcade: facadeArcade,
@@ -475,13 +593,17 @@
     screened: facadeScreened,
     timberFrame: facadeTimberFrame,
     decoBanded: facadeDecoBanded,
-    colonnade: facadeColonnade
+    colonnade: facadeColonnade,
+    latticeBay: facadeLatticeBay,
+    stuccoBays: facadeStuccoBays
   };
   NS.systemNames = ['grid', 'arcade', 'solid', 'balconyGrid', 'ribbonGrid',
-    'veranda', 'screened', 'timberFrame', 'decoBanded', 'colonnade'];
+    'veranda', 'screened', 'timberFrame', 'decoBanded', 'colonnade',
+    'latticeBay', 'stuccoBays'];
   NS.layout = layout;
   NS.latticePanel = latticePanel;
   NS.post = post;
+  NS.quoins = quoins;
 
   const root = typeof window !== 'undefined' ? window : globalThis;
   root.AD = root.AD || {};
