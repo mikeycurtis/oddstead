@@ -40,6 +40,7 @@ Opening `index.html` directly may work, but a local server is recommended.
 - **Detail**: adjust rendering density
 - **Monumentality**: change the generated building's footprint and height hierarchy without changing its seed
 - **Domed roofs**: deterministic drum-supported, ribbed, and onion dome profiles with solid backing and finials
+- **City mode**: deterministic waterfront cities with connected street hierarchy, blocks, parcels, civic core, parks, and hill contours
 - **Opaque walls**: add paper backing to wall and roof surfaces
 - **Animate drawing**: replay the generated ink in draw order
 - **Record video**: capture the canvas, then choose whether to save or delete it

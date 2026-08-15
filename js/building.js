@@ -590,10 +590,16 @@
    */
   function render(ctx, plan, view, rect, lod) {
     lod = lod == null ? 1 : lod;
-    const cam = fitCam(plan, view, rect);
+    const cam = view.cam || fitCam(plan, view, rect);
+    const origin = view.origin || { x: 0, y: 0, z: 0 };
+    const rotation = view.rotation || 0;
+    const rc = Math.cos(rotation), rs = Math.sin(rotation);
+    const P = function (x, y, z) {
+      const xx = x * rc - z * rs, zz = x * rs + z * rc;
+      return G.project({ x: origin.x + xx, y: origin.y + y, z: origin.z + zz }, cam);
+    };
     const preset = ST.pens[plan.penName] || ST.pens.dryNib;
     const pens = S.makePens(AD.rng.makeRng(plan.seed + ':pen'), preset);
-    const P = function (x, y, z) { return G.project({ x: x, y: y, z: z }, cam); };
     const R = {
       P: P, cam: cam, pxPerUnit: cam.scale,
       opaqueWalls: !!view.opaqueWalls,

@@ -17,7 +17,7 @@ const ROOT = path.resolve(__dirname, '..');
 const ORDER = [
   'rng.js', 'style.js', 'stroke.js', 'paper.js', 'geom.js', 'massing.js',
   'el-roofs.js', 'el-openings.js', 'el-facade.js', 'el-details.js', 'el-site.js',
-  'building.js', 'plate.js', 'export.js'
+  'building.js', 'plate.js', 'city.js', 'export.js'
 ];
 
 let failures = 0;
@@ -112,7 +112,7 @@ try {
 
 const AD = sandbox.AD;
 const NAMESPACES = ['rng', 'style', 'stroke', 'paper', 'geom', 'massing', 'roofs',
-  'openings', 'facade', 'details', 'site', 'building', 'plate', 'exporter'];
+  'openings', 'facade', 'details', 'site', 'building', 'plate', 'city', 'exporter'];
 console.log('namespaces');
 NAMESPACES.forEach(function (n) {
   if (!AD[n]) fail('AD.' + n + ' missing');
@@ -497,6 +497,29 @@ console.log('plate mode');
   const s48 = AD.plate.cellSeed('stable', 7);
   if (s24 !== s48) fail('cell seeds unstable');
   else ok('cell 7 of seed "stable" is always ' + s24);
+}
+
+console.log('city mode');
+{
+  ['city-a', 'city-b', 'city-c'].forEach(function (seed) {
+    const city = AD.city.generate(seed, { count: 24, density: 0.85, monumentality: 1 });
+    const ctx = makeCtx();
+    try {
+      AD.city.render(ctx, city, { w: 900, h: 1125, yaw: 24, pitch: 18, density: 0.85, monumentality: 1, lod: 0.6 });
+    } catch (err) {
+      fail('city ' + seed + ' threw: ' + err.stack.split('\n')[0]);
+      return;
+    }
+    if (city.roads.length < 8 || city.blocks.length < 12 || city.buildings.length < 20) fail('city ' + seed + ' lacks urban structure');
+    else if (city.water.length < 8) fail('city ' + seed + ' lacks waterfront');
+    else if (ctx._bad.length) fail('city ' + seed + ' non-finite: ' + ctx._bad[0]);
+    else if (ctx._ops < 1000) fail('city ' + seed + ' drew too few operations');
+    else ok('city ' + seed + ' drew ' + city.buildings.length + ' buildings, ' + city.roads.length + ' roads, ' + city.blocks.length + ' blocks');
+  });
+  const a = JSON.stringify(AD.city.generate('city-stable', { count: 24 }));
+  const b = JSON.stringify(AD.city.generate('city-stable', { count: 24 }));
+  if (a !== b) fail('city plan is not deterministic');
+  else ok('city plan is deterministic across calls');
 }
 
 console.log('url state');

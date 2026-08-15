@@ -23,7 +23,7 @@
     focus: null
   };
 
-  const ASPECT = { single: 0.8, plate: 0.72 };
+  const ASPECT = { single: 0.8, plate: 0.72, city: 0.76 };
   const MAX_DPR = 2;
 
   const state = AD.exporter.readState(DEFAULTS);
@@ -48,7 +48,7 @@
   function sanitizeState() {
     if (!state.seed) state.seed = AD.rng.freshSeed();
     state.seed = String(state.seed).trim().slice(0, 48) || AD.rng.freshSeed();
-    if (state.mode !== 'plate') state.mode = 'single';
+    if (state.mode !== 'plate' && state.mode !== 'city') state.mode = 'single';
     if (state.mood !== 'any' && !ST.moods[state.mood]) state.mood = 'any';
     state.yaw = clamp(isFinite(state.yaw) ? state.yaw : 24, -180, 180);
     state.pitch = clamp(isFinite(state.pitch) ? state.pitch : 16, 2, 38);
@@ -123,6 +123,17 @@
     return plan;
   }
 
+  function ensureCityPlan() {
+    if (plan && plan.__city && plan.seed === state.seed && plan.count === state.count &&
+      plan.density === state.density && plan.monumentality === state.monumentality) return plan;
+    plan = AD.city.generate(state.seed, { count: state.count, density: state.density, monumentality: state.monumentality });
+    plan.__city = true;
+    plan.count = state.count;
+    plan.density = state.density;
+    plan.monumentality = state.monumentality;
+    return plan;
+  }
+
   function now() {
     return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   }
@@ -149,7 +160,9 @@
   function updateA11y() {
     if (!canvas) return;
     let label;
-    if (state.mode === 'plate') {
+    if (state.mode === 'city') {
+      label = 'Procedural city with ' + (plan ? plan.buildings.length : state.count) + ' buildings, streets, civic core, hills, and waterfront, seed ' + state.seed + '.';
+    } else if (state.mode === 'plate') {
       label = 'Sketchbook plate of ' + state.count + ' generated buildings, seed ' +
         state.seed + ', ' + (state.mood === 'any' ? 'mixed moods' : state.mood + ' mood') + '.';
     } else if (plan) {
@@ -195,6 +208,12 @@
         inkSingle(ctx, cssW, cssH, p, { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls });
         endFrame(ctx, cssW, cssH, dpr);
         if (debug) console.log('[antitecture] render', (now() - t0).toFixed(1) + 'ms');
+        updateA11y();
+        status('');
+      } else if (state.mode === 'city') {
+        const cp = ensureCityPlan();
+        AD.city.render(ctx, cp, { w: cssW, h: cssH, yaw: state.yaw, pitch: state.pitch, density: state.density, monumentality: state.monumentality, lod: 0.72 });
+        endFrame(ctx, cssW, cssH, dpr);
         updateA11y();
         status('');
       } else {
@@ -249,6 +268,8 @@
     beginFrame(c, lw, lh, scale);
     if (state.mode === 'single') {
       inkSingle(c, lw, lh, ensurePlan(), { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls });
+    } else if (state.mode === 'city') {
+      AD.city.render(c, ensureCityPlan(), { w: lw, h: lh, yaw: state.yaw, pitch: state.pitch, density: state.density, monumentality: state.monumentality, lod: 0.86 });
     } else {
       AD.plate.create(c, {
         seed: state.seed, count: state.count, mood: state.mood,
@@ -517,8 +538,9 @@
     el.pitchOut.textContent = Math.round(state.pitch) + '°';
     el.densityOut.textContent = Number(state.density).toFixed(1) + '×';
     el.monumentalityOut.textContent = Number(state.monumentality).toFixed(1) + '×';
-    el.countWrap.hidden = state.mode !== 'plate';
-    el.countWrap.setAttribute('aria-hidden', state.mode !== 'plate' ? 'true' : 'false');
+    el.countWrap.hidden = state.mode === 'single';
+    el.countLabel.textContent = state.mode === 'city' ? 'City size' : 'Plate size';
+    el.countWrap.setAttribute('aria-hidden', state.mode === 'single' ? 'true' : 'false');
   }
 
   function bind() {
@@ -532,6 +554,7 @@
     el.record = document.getElementById('record-canvas');
     el.mode = document.getElementById('mode');
     el.count = document.getElementById('count');
+    el.countLabel = document.getElementById('count-label');
     el.countWrap = document.getElementById('count-wrap');
     el.mood = document.getElementById('mood');
     el.yaw = document.getElementById('yaw');
@@ -566,7 +589,7 @@
     });
 
     el.mode.addEventListener('change', function () {
-      state.mode = el.mode.value === 'plate' ? 'plate' : 'single';
+      state.mode = el.mode.value === 'plate' ? 'plate' : (el.mode.value === 'city' ? 'city' : 'single');
       state.focus = null;
       render();
     });
