@@ -749,6 +749,92 @@
     }
   }
 
+  // --- radial domes ---------------------------------------------------------
+  // Domes are built from deterministic latitude/longitude strips. This keeps
+  // the silhouette coherent under orbit while allowing the renderer to paper
+  // back each visible strip like every other roof surface.
+  function roofDome(ctx, R, pens, rng, p) {
+    const b = box(R), h = R.roof.h;
+    const mode = R.roof.variant === 'onionDome' ? 'onion' : R.roof.variant === 'ribbedDome' ? 'ribbed' : 'round';
+    const segs = p.lod >= 0.72 ? 16 : 10;
+    const rings = p.lod >= 0.72 ? 7 : 4;
+    const radius = Math.min(b.w, b.d) * (mode === 'onion' ? 0.43 : 0.48);
+    const drumH = h * (mode === 'onion' ? 0.16 : 0.22);
+    const capH = Math.max(0.2, h - drumH);
+    const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
+    const baseY = b.y, crownY = baseY + drumH;
+    const P = function (v) { return R.P(v.x, v.y, v.z); };
+    const point = function (theta, phi) {
+      const s = Math.sin(theta), c = Math.cos(theta);
+      let radial = radius * c;
+      let lift = capH * s;
+      if (mode === 'onion') {
+        radial *= 0.78 + 0.36 * Math.sin(theta * 2.1);
+        lift = capH * Math.pow(s, 0.82);
+      }
+      return G.v3(cx + radial * Math.cos(phi), crownY + lift, cz + radial * Math.sin(phi));
+    };
+
+    for (let i = 0; i < segs; i++) {
+      const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+      const face = [
+        G.v3(cx + radius * Math.cos(a0), baseY, cz + radius * Math.sin(a0)),
+        G.v3(cx + radius * Math.cos(a1), baseY, cz + radius * Math.sin(a1)),
+        G.v3(cx + radius * Math.cos(a1), crownY, cz + radius * Math.sin(a1)),
+        G.v3(cx + radius * Math.cos(a0), crownY, cz + radius * Math.sin(a0))
+      ];
+      if (!visiblePlane(R, face[0], face[1], face[2])) continue;
+      const q = proj(R, face);
+      opaquePoly(ctx, R, q);
+      if (p.lod >= 0.7 && i % 2 === 0) slopeHatch(ctx, pens, q, rng, p, 0.18);
+      S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: 0.78 });
+    }
+
+    for (let j = 0; j < rings; j++) {
+      const t0 = (j / rings) * Math.PI / 2, t1 = ((j + 1) / rings) * Math.PI / 2;
+      for (let i = 0; i < segs; i++) {
+        const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+        const face = [point(t0, a0), point(t0, a1), point(t1, a1), point(t1, a0)];
+        if (!visiblePlane(R, face[0], face[1], face[2])) continue;
+        const q = proj(R, face);
+        opaquePoly(ctx, R, q);
+        if (p.lod >= 0.62 && (mode === 'ribbed' || i % 2 === 0)) {
+          slopeHatch(ctx, pens, q, rng, p, mode === 'ribbed' ? 0.13 : 0.2);
+        }
+        S.strokePoly(ctx, pens.detail, q, { lod: p.lod, width: 0.72 });
+      }
+    }
+
+    for (let j = 1; j < rings; j++) {
+      const theta = (j / rings) * Math.PI / 2, ring = [];
+      for (let i = 0; i <= segs; i++) ring.push(P(point(theta, (i / segs) * Math.PI * 2)));
+      S.strokePath(ctx, pens.hair, ring, { lod: p.lod, alpha: 0.72 });
+    }
+    const ribCount = mode === 'ribbed' ? segs : Math.floor(segs / 2);
+    for (let i = 0; i < ribCount; i++) {
+      if (p.lod < 0.58 && i % 2) continue;
+      const phi = (i / ribCount) * Math.PI * 2, line = [];
+      for (let j = 0; j <= rings; j++) line.push(P(point((j / rings) * Math.PI / 2, phi)));
+      S.strokePath(ctx, mode === 'ribbed' ? pens.detail : pens.hair, line,
+        { lod: p.lod, alpha: mode === 'ribbed' ? 0.82 : 0.62, width: mode === 'ribbed' ? 0.82 : 0.6 });
+    }
+
+    const rim = [];
+    for (let i = 0; i <= segs; i++) {
+      const a = (i / segs) * Math.PI * 2;
+      rim.push(P(G.v3(cx + radius * Math.cos(a), crownY, cz + radius * Math.sin(a))));
+    }
+    S.strokePath(ctx, pens.outline, rim, { lod: p.lod, width: 0.95 });
+    const apex = P(point(Math.PI / 2, 0));
+    const finialTop = P(G.v3(cx, crownY + capH + h * (mode === 'onion' ? 0.22 : 0.16), cz));
+    S.strokePath(ctx, pens.outline, [apex, finialTop], { lod: p.lod, width: 0.95 });
+    if (p.lod >= 0.6) {
+      S.strokePath(ctx, pens.detail,
+        [{ x: finialTop.x - 3.2, y: finialTop.y }, { x: finialTop.x + 3.2, y: finialTop.y }],
+        { lod: p.lod, width: 0.75 });
+    }
+  }
+
   NS.roofs = {
     flat: roofFlat,
     gabled: roofGabled,
@@ -758,6 +844,9 @@
     broadEave: roofBroadEave,
     pantile: roofPantile,
     tieredPyramid: roofTieredPyramid,
+    dome: roofDome,
+    ribbedDome: roofDome,
+    onionDome: roofDome,
     steppedParapet: roofStepped,
     steepGable: roofSteepGable,
     crenellated: roofCrenellated,
@@ -765,7 +854,7 @@
     pediment: roofPediment
   };
   NS.roofNames = ['flat', 'gabled', 'hipped', 'shed', 'barrel',
-    'broadEave', 'pantile', 'tieredPyramid', 'steppedParapet', 'steepGable', 'crenellated',
+    'broadEave', 'pantile', 'tieredPyramid', 'dome', 'ribbedDome', 'onionDome', 'steppedParapet', 'steepGable', 'crenellated',
     'sweptEave', 'pediment'];
 
   /** roofHeight — how far the roof rises above its prism, used for fit-to-rect. */
@@ -780,6 +869,9 @@
       case 'broadEave': return small * rng.range(0.22, 0.34);
       case 'pantile': return small * rng.range(0.28, 0.44);
       case 'tieredPyramid': return small * rng.range(0.42, 0.72);
+      case 'dome': return small * rng.range(0.42, 0.62);
+      case 'ribbedDome': return small * rng.range(0.5, 0.74);
+      case 'onionDome': return small * rng.range(0.56, 0.86);
       case 'steppedParapet': return rng.range(1.1, 2.4);
       case 'steepGable': return small * rng.range(0.55, 0.85);
       case 'crenellated': return rng.range(0.8, 1.5);

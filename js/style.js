@@ -253,7 +253,7 @@
     mediterranean: {
       label: 'Mediterranean',
       massing: { cluster: 4, lshape: 3, longhouse: 2.5, slab: 2, tower: 0.8 },
-      roofs: { pantile: 4, hipped: 3, gabled: 2.5, flat: 2.5, shed: 1, barrel: 1 },
+      roofs: { pantile: 4, hipped: 3, gabled: 2.5, dome: 1, flat: 2.5, shed: 1, barrel: 1 },
       facades: { grid: 3.5, arcade: 3, balconyGrid: 2.5, solid: 1, colonnade: 1.2 },
       windows: { shuttered: 4, arched: 3, plain: 2, sash: 1.2, round: 0.8, ribbon: 0.2 },
       doors: { arched: 3.5, plain: 2, dbl: 2, storefront: 1 },
@@ -330,7 +330,7 @@
     moorish: {
       label: 'Moorish courtyard',
       massing: { cluster: 4, lshape: 3, slab: 2.5, longhouse: 2, tower: 1.2 },
-      roofs: { crenellated: 4, flat: 3, pantile: 2.5, hipped: 1, broadEave: 0.6 },
+      roofs: { dome: 2, onionDome: 1.5, crenellated: 4, flat: 3, pantile: 2.5, hipped: 1, broadEave: 0.6 },
       facades: { arcade: 4, screened: 3.5, colonnade: 2.5, grid: 2, solid: 1.2 },
       windows: { horseshoe: 4.5, lattice: 3.5, arched: 2, round: 1, plain: 0.8 },
       doors: { gateway: 4, arched: 3, dbl: 1.2, plain: 0.8 },
@@ -420,7 +420,7 @@
     southasiantemple: {
       label: 'South Asian temple',
       massing: { dravidianTemple: 6, steppedTemple: 1.5, tower: 1, classicalTemple: 0.5 },
-      roofs: { tieredPyramid: 5, steppedParapet: 2, broadEave: 2, hipped: 1.2, pantile: 0.8, pediment: 0.4 },
+      roofs: { tieredPyramid: 5, dome: 1.5, ribbedDome: 1.5, onionDome: 1, steppedParapet: 2, broadEave: 2, hipped: 1.2, pantile: 0.8, pediment: 0.4 },
       facades: { colonnade: 4, arcade: 3, veranda: 3, screened: 1.5, solid: 1 },
       windows: { arched: 3, round: 2, lattice: 2, plain: 1 },
       doors: { gateway: 5, arched: 3, dbl: 1.5, plain: 0.8 },
@@ -465,7 +465,7 @@
     classicaltemple: {
       label: 'Classical Greek / Roman temple',
       massing: { peristyleTemple: 8, classicalTemple: 2 },
-      roofs: { pediment: 8, hipped: 1, gabled: 0.5 },
+      roofs: { dome: 2.5, ribbedDome: 1.5, pediment: 8, hipped: 1, gabled: 0.5 },
       facades: { colonnade: 10, solid: 0.2 },
       windows: { trabeated: 8, plain: 0.5 },
       doors: { pedimentDoor: 8, dbl: 2, plain: 0.2 },
