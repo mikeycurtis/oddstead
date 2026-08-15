@@ -763,6 +763,17 @@
     const capH = Math.max(0.2, h - drumH);
     const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
     const baseY = b.y, crownY = baseY + drumH;
+    const deck = [
+      G.v3(b.x0, baseY, b.z1), G.v3(b.x1, baseY, b.z1),
+      G.v3(b.x1, baseY, b.z0), G.v3(b.x0, baseY, b.z0)
+    ];
+    // The dome sits on a real roof deck. Back it before drawing the drum so
+    // lower stacked volumes cannot ghost through the opening beneath the cap.
+    const deck2 = proj(R, deck);
+    if (G.facing(G.v3(0, 1, 0), R.cam) > 0.02) {
+      opaquePoly(ctx, R, deck2);
+      S.strokePoly(ctx, pens.outline, deck2, { lod: p.lod, width: 0.82 });
+    }
     const P = function (v) { return R.P(v.x, v.y, v.z); };
     const point = function (theta, phi) {
       const s = Math.sin(theta), c = Math.cos(theta);
