@@ -40,7 +40,7 @@
     state.seed = String(state.seed).trim().slice(0, 48) || AD.rng.freshSeed();
     if (state.mode !== 'plate') state.mode = 'single';
     if (state.mood !== 'any' && !ST.moods[state.mood]) state.mood = 'any';
-    state.yaw = clamp(isFinite(state.yaw) ? state.yaw : 24, -60, 60);
+    state.yaw = clamp(isFinite(state.yaw) ? state.yaw : 24, -180, 180);
     state.pitch = clamp(isFinite(state.pitch) ? state.pitch : 16, 2, 38);
     state.density = clamp(isFinite(state.density) ? state.density : 1, 0.4, 1.6);
     state.count = AD.plate.counts.indexOf(+state.count) >= 0 ? +state.count : 24;
@@ -355,8 +355,8 @@
         case 'p': case 'P': toggleMode(); break;
         case 's': case 'S': doExport(); break;
         case 'c': case 'C': doCopy(); break;
-        case 'ArrowLeft': state.yaw = clamp(state.yaw - 5, -60, 60); render(); break;
-        case 'ArrowRight': state.yaw = clamp(state.yaw + 5, -60, 60); render(); break;
+        case 'ArrowLeft': state.yaw = clamp(state.yaw - 5, -180, 180); render(); break;
+        case 'ArrowRight': state.yaw = clamp(state.yaw + 5, -180, 180); render(); break;
         case 'ArrowUp': state.pitch = clamp(state.pitch + 3, 2, 38); render(); break;
         case 'ArrowDown': state.pitch = clamp(state.pitch - 3, 2, 38); render(); break;
         case '[': state.density = clamp(state.density - 0.1, 0.4, 1.6); plan = null; render(); break;

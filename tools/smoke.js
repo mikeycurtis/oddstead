@@ -449,8 +449,8 @@ console.log('extreme parameters');
 {
   const cases = [
     ['empty-ish seed', '', { mood: 'any', density: 1 }, { yaw: 0, pitch: 2 }],
-    ['unicode seed', '⌂ хата 建物', { mood: 'town', density: 1.6 }, { yaw: 60, pitch: 38 }],
-    ['long seed', 'x'.repeat(48), { mood: 'tower', density: 0.4 }, { yaw: -60, pitch: 2 }],
+    ['unicode seed', '⌂ хата 建物', { mood: 'town', density: 1.6 }, { yaw: 180, pitch: 38 }],
+    ['long seed', 'x'.repeat(48), { mood: 'tower', density: 0.4 }, { yaw: -180, pitch: 2 }],
     ['flat-on view', 'front-elevation', { mood: 'industrial', density: 1 }, { yaw: 0, pitch: 2 }],
     ['tiny rect', 'tiny', { mood: 'mediterranean', density: 1 }, { yaw: 30, pitch: 20 }]
   ];
@@ -470,7 +470,7 @@ console.log('extreme parameters');
 
 console.log('plate mode');
 {
-  [12, 24, 48].forEach(function (count) {
+  [4, 12, 24, 48].forEach(function (count) {
     const ctx = makeCtx();
     const t0 = Date.now();
     let job;

@@ -10,8 +10,8 @@
   const S = AD.stroke;
   const ST = AD.style;
 
-  const GRIDS = { 12: [3, 4], 24: [4, 6], 48: [6, 8] };
-  NS.counts = [12, 24, 48];
+  const GRIDS = { 4: [2, 2], 12: [3, 4], 24: [4, 6], 48: [6, 8] };
+  NS.counts = [4, 12, 24, 48];
 
   function grid(count) {
     return GRIDS[count] || GRIDS[24];
@@ -19,6 +19,7 @@
 
   function lodFor(count) {
     if (count >= 48) return 0.35;
+    if (count <= 4) return 0.78;
     if (count >= 24) return 0.5;
     return 0.62;
   }
@@ -114,7 +115,7 @@
     const jitter = AD.rng.makeRng(seed + ':view');
     // per-cell yaw variation so the plate reads as varied studies, not a stamp
     const view = {
-      yaw: Math.max(-62, Math.min(62, o.view.yaw + jitter.range(-26, 26))),
+      yaw: Math.max(-180, Math.min(180, o.view.yaw + jitter.range(-26, 26))),
       pitch: Math.max(2, Math.min(38, o.view.pitch + jitter.range(-6, 9)))
     };
     let plan = null;
