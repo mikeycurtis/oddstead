@@ -516,18 +516,29 @@ console.log('city mode');
     else if (ctx._ops < 1000) fail('city ' + seed + ' drew too few operations');
     else ok('city ' + seed + ' drew ' + city.buildings.length + ' buildings, ' + city.roads.length + ' roads, ' + city.blocks.length + ' blocks');
   });
-  const a = JSON.stringify(AD.city.generate('city-stable', { count: 24 }));
-  const b = JSON.stringify(AD.city.generate('city-stable', { count: 24 }));
-  if (a !== b) fail('city plan is not deterministic');
+  const stableA = JSON.stringify(AD.city.generate('city-stable', { count: 24 }));
+  const stableB = JSON.stringify(AD.city.generate('city-stable', { count: 24 }));
+  if (stableA !== stableB) fail('city plan is not deterministic');
   else ok('city plan is deterministic across calls');
+  const cityA = AD.city.generate('city-a', { count: 24 });
+  const cityB = AD.city.generate('city-b', { count: 24 });
+  if (JSON.stringify(cityA.water) === JSON.stringify(cityB.water)) fail('waterfront is not seed-dependent');
+  else if (JSON.stringify(cityA.roads) === JSON.stringify(cityB.roads)) fail('streets are not seed-dependent');
+  else ok('waterfront and streets vary by seed');
+  const city1 = AD.city.generate('city-scale', { count: 24, cityScale: 1 });
+  const city5 = AD.city.generate('city-scale', { count: 24, cityScale: 5 });
+  if (city5.bounds.x1 - city5.bounds.x0 !== (city1.bounds.x1 - city1.bounds.x0) * 5) fail('5x city scale did not expand bounds');
+  else if (city5.buildings.length <= city1.buildings.length) fail('5x city scale did not add district buildings');
+  else ok('city scale expands the district to 5x');
+
 }
 
 console.log('url state');
 {
   const q = AD.exporter.queryString({
-    seed: 'k7x2mp', mode: 'plate', mood: 'town', yaw: 24.456, pitch: 16, density: 1.2, monumentality: 1.3, zoom: 2.4, panX: 0.35, panY: -0.2, count: 24
+    seed: 'k7x2mp', mode: 'plate', mood: 'town', yaw: 24.456, pitch: 16, density: 1.2, monumentality: 1.3, zoom: 2.4, panX: 0.35, panY: -0.2, cityScale: 5, count: 24
   });
-  ['seed=k7x2mp', 'mode=plate', 'mood=town', 'yaw=24.46', 'density=1.2', 'monumentality=1.3', 'count=24'].forEach(function (frag) {
+  ['seed=k7x2mp', 'mode=plate', 'mood=town', 'yaw=24.46', 'density=1.2', 'monumentality=1.3', 'count=24', 'cityScale=5'].forEach(function (frag) {
     if (q.indexOf(frag) < 0) fail('query string missing ' + frag + ' (' + q + ')');
   });
   const back = AD.exporter.readState({ seed: 'zzz', mode: 'single' });

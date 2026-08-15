@@ -19,6 +19,7 @@
     zoom: 'number',
     panX: 'number',
     panY: 'number',
+    cityScale: 'number',
     count: 'number',
     opaqueWalls: 'boolean',
     focus: 'number'

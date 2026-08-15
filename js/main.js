@@ -21,6 +21,7 @@
     zoom: 1,
     panX: 0,
     panY: 0,
+    cityScale: 1,
     count: 24,
     opaqueWalls: false,
     focus: null
@@ -60,6 +61,7 @@
     state.zoom = clamp(isFinite(state.zoom) ? state.zoom : 1, 1, 5);
     state.panX = clamp(isFinite(state.panX) ? state.panX : 0, -1.5, 1.5);
     state.panY = clamp(isFinite(state.panY) ? state.panY : 0, -1.5, 1.5);
+    state.cityScale = [1, 2, 3, 4, 5].indexOf(+state.cityScale) >= 0 ? +state.cityScale : 1;
     state.count = AD.plate.counts.indexOf(+state.count) >= 0 ? +state.count : 24;
     state.opaqueWalls = state.opaqueWalls === true || state.opaqueWalls === 'true' || state.opaqueWalls === 1;
     state.focus = state.mode === 'plate' && state.focus !== null && state.focus !== '' && Number.isInteger(+state.focus) && +state.focus >= 0 && +state.focus < state.count ? +state.focus : null;
@@ -130,11 +132,12 @@
   }
 
   function ensureCityPlan() {
-    if (plan && plan.__city && plan.seed === state.seed && plan.count === state.count &&
+    if (plan && plan.__city && plan.seed === state.seed && plan.count === state.count && plan.cityScale === state.cityScale &&
       plan.density === state.density && plan.monumentality === state.monumentality) return plan;
-    plan = AD.city.generate(state.seed, { count: state.count, density: state.density, monumentality: state.monumentality });
+    plan = AD.city.generate(state.seed, { count: state.count, cityScale: state.cityScale, density: state.density, monumentality: state.monumentality });
     plan.__city = true;
     plan.count = state.count;
+    plan.cityScale = state.cityScale;
     plan.density = state.density;
     plan.monumentality = state.monumentality;
     return plan;
@@ -225,7 +228,7 @@
         status('');
       } else if (state.mode === 'city') {
         const cp = ensureCityPlan();
-        AD.city.render(ctx, cp, { w: cssW, h: cssH, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, panX: state.panX, panY: state.panY, density: state.density, monumentality: state.monumentality, lod: 0.72 });
+        AD.city.render(ctx, cp, { w: cssW, h: cssH, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, cityScale: state.cityScale, panX: state.panX, panY: state.panY, density: state.density, monumentality: state.monumentality, lod: 0.72 });
         endFrame(ctx, cssW, cssH, dpr);
         updateA11y();
         status('');
@@ -282,7 +285,7 @@
     if (state.mode === 'single') {
       inkSingle(c, lw, lh, ensurePlan(), { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls });
     } else if (state.mode === 'city') {
-      AD.city.render(c, ensureCityPlan(), { w: lw, h: lh, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, panX: state.panX, panY: state.panY, density: state.density, monumentality: state.monumentality, lod: 0.86 });
+      AD.city.render(c, ensureCityPlan(), { w: lw, h: lh, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, cityScale: state.cityScale, panX: state.panX, panY: state.panY, density: state.density, monumentality: state.monumentality, lod: 0.86 });
     } else {
       AD.plate.create(c, {
         seed: state.seed, count: state.count, mood: state.mood,
@@ -542,6 +545,7 @@
     el.mood.value = state.mood;
     el.mode.value = state.mode;
     el.count.value = String(state.count);
+    el.cityScale.value = String(state.cityScale);
     el.yaw.value = String(state.yaw);
     el.pitch.value = String(state.pitch);
     el.density.value = String(state.density);
@@ -553,7 +557,9 @@
     el.monumentalityOut.textContent = Number(state.monumentality).toFixed(1) + '×';
     el.countWrap.hidden = state.mode === 'single';
     el.cityViewWrap.hidden = state.mode !== 'city';
-    el.countLabel.textContent = state.mode === 'city' ? 'City size' : 'Plate size';
+    el.cityScaleWrap.hidden = state.mode !== 'city';
+    el.cityScaleWrap.setAttribute('aria-hidden', state.mode !== 'city' ? 'true' : 'false');
+    el.countLabel.textContent = state.mode === 'city' ? 'Building count' : 'Plate size';
     el.countWrap.setAttribute('aria-hidden', state.mode === 'single' ? 'true' : 'false');
   }
 
@@ -570,6 +576,8 @@
     el.count = document.getElementById('count');
     el.countLabel = document.getElementById('count-label');
     el.cityViewWrap = document.getElementById('city-view-wrap');
+    el.cityScaleWrap = document.getElementById('city-scale-wrap');
+    el.cityScale = document.getElementById('city-scale');
     el.resetCityView = document.getElementById('reset-city-view');
     el.countWrap = document.getElementById('count-wrap');
     el.mood = document.getElementById('mood');
@@ -613,6 +621,13 @@
     el.count.addEventListener('change', function () {
       state.count = +el.count.value;
       state.focus = null;
+      render();
+    });
+    el.cityScale.addEventListener('change', function () {
+      state.cityScale = +el.cityScale.value;
+      state.panX = 0;
+      state.panY = 0;
+      state.zoom = 1;
       render();
     });
     el.mood.addEventListener('change', function () {
