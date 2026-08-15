@@ -27,6 +27,14 @@ temp/
 *.mov
 screenshots/
 
+# Private planning documents
+PLAN.md
+PRD.txt
+plan/
+prd/
+*.plan.md
+*.prd.md
+
 # Node tooling, if used locally for experiments
 node_modules/
 npm-debug.log*
