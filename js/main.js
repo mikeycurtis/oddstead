@@ -162,7 +162,8 @@
     job = null;
   }
 
-  function render() {
+  function render(options) {
+    const immediate = !!(options && options.immediate);
     if (!ctx) return;
     stopAnimation();
     stopJob();
@@ -188,6 +189,16 @@
           density: state.density, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
           w: cssW, h: cssH
         });
+        if (immediate) {
+          job.finish();
+          endFrame(ctx, cssW, cssH, dpr);
+          if (debug) console.log('[antitecture] immediate plate', (now() - t0).toFixed(1) + 'ms');
+          updateA11y();
+          status('');
+          job = null;
+          rafId = null;
+          return;
+        }
         status('inking 0/' + job.total + '…', true);
         const step = function () {
           if (!job) return;
@@ -464,7 +475,7 @@
       el.pitch.value = String(state.pitch);
       el.yawOut.textContent = Math.round(state.yaw) + '°';
       el.pitchOut.textContent = Math.round(state.pitch) + '°';
-      render();
+      render({ immediate: true });
     });
     function endDrag(e) {
       if (!drag || (e.pointerId != null && e.pointerId !== drag.id)) return;
