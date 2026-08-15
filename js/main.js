@@ -265,7 +265,7 @@
     }
 
     const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    const duration = Math.max(2600, Math.min(7000, strokes.length * 8));
+    const duration = Math.max(3500, Math.min(10000, strokes.length * 14));
     el.animate.textContent = 'Stop animation';
     status('drawing 0/' + strokes.length + '…', true);
 
@@ -285,6 +285,18 @@
         ctx.restore();
       }
       for (let i = 0; i < count; i++) drawCapturedStroke(strokes[i]);
+      if (count > 0 && count < strokes.length) {
+        const current = strokes[count - 1];
+        const tip = current.left[Math.floor(current.left.length * 0.5)];
+        if (tip) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(214, 58, 92, 0.8)';
+          ctx.beginPath();
+          ctx.arc(tip.x, tip.y, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
 
       if (raw < 1 && animationId !== 0) {
         status('drawing ' + count + '/' + strokes.length + '…', true);
