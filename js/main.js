@@ -32,6 +32,10 @@
   let job = null, rafId = null;
   let animationId = 0;
   let focusRafId = 0;
+  let recorder = null;
+  let recordingChunks = [];
+  let pendingRecording = null;
+  let recordFrameTimer = null;
   let statusTimer = null;
   let debug = false;
   const el = {};
@@ -179,6 +183,7 @@
 
     const focusIndex = options && Object.prototype.hasOwnProperty.call(options, 'focusIndex') ? options.focusIndex : state.focus;
     const focusProgress = options && Object.prototype.hasOwnProperty.call(options, 'focusProgress') ? options.focusProgress : (state.focus == null ? 0 : 1);
+    const focusBackground = options && options.focusBackground === true;
     const t0 = now();
     try {
       beginFrame(ctx, cssW, cssH, dpr);
@@ -195,6 +200,7 @@
           seed: state.seed, count: state.count, mood: state.mood,
           density: state.density, view: { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls },
           focusIndex: focusIndex, focusProgress: focusProgress,
+          showBackground: focusBackground,
           w: cssW, h: cssH
         });
         if (immediate) {
@@ -400,6 +406,90 @@
     }, 30);
   }
 
+  function savePendingRecording() {
+    if (!pendingRecording) return;
+    const link = document.createElement('a');
+    link.href = pendingRecording.url;
+    link.download = pendingRecording.filename;
+    link.click();
+    const size = Math.round(pendingRecording.blob.size / 1024);
+    URL.revokeObjectURL(pendingRecording.url);
+    pendingRecording = null;
+    if (el.recordingDialog && el.recordingDialog.open) el.recordingDialog.close();
+    status('saved video · ' + size + ' KB');
+  }
+
+  function discardPendingRecording() {
+    if (!pendingRecording) return;
+    URL.revokeObjectURL(pendingRecording.url);
+    pendingRecording = null;
+    if (el.recordingDialog && el.recordingDialog.open) el.recordingDialog.close();
+    status('recording deleted');
+  }
+
+  function toggleRecording() {
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+      return;
+    }
+    if (!canvas.captureStream || typeof MediaRecorder === 'undefined') {
+      status('video recording is not supported in this browser');
+      return;
+    }
+    const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    const mimeType = candidates.find(function (type) {
+      return typeof MediaRecorder.isTypeSupported !== 'function' || MediaRecorder.isTypeSupported(type);
+    }) || '';
+    try {
+      const stream = canvas.captureStream(30);
+      recorder = new MediaRecorder(stream, mimeType ? { mimeType: mimeType } : undefined);
+      recordingChunks = [];
+      recorder.ondataavailable = function (event) {
+        if (event.data && event.data.size) recordingChunks.push(event.data);
+      };
+      recorder.onerror = function (event) {
+        console.error(event.error || event);
+        status('recording failed');
+      };
+      recorder.onstop = function () {
+        stream.getTracks().forEach(function (track) { track.stop(); });
+        if (recordFrameTimer) { clearInterval(recordFrameTimer); recordFrameTimer = null; }
+        const type = recorder.mimeType || 'video/webm';
+        const blob = new Blob(recordingChunks, { type: type });
+        if (!blob.size) {
+          status('recording was empty');
+        } else {
+          pendingRecording = {
+            blob: blob,
+            url: URL.createObjectURL(blob),
+            filename: 'antitecture-' + state.seed.replace(/[^a-z0-9_-]+/gi, '-') + '-' + state.mode + '.webm'
+          };
+          if (el.recordingDialog && typeof el.recordingDialog.showModal === 'function') {
+            el.recordingDialog.showModal();
+          } else if (window.confirm('Save this canvas recording?')) {
+            savePendingRecording();
+          } else {
+            discardPendingRecording();
+          }
+        }
+        recordingChunks = [];
+        recorder = null;
+        if (el.record) { el.record.disabled = false; el.record.textContent = 'Record video'; }
+      };
+      recorder.start(250);
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack && typeof videoTrack.requestFrame === 'function') {
+        recordFrameTimer = setInterval(function () { videoTrack.requestFrame(); }, 33);
+      }
+      el.record.textContent = 'Stop & choose save';
+      status('recording canvas…', true);
+    } catch (err) {
+      console.error(err);
+      recorder = null;
+      status('could not start recording: ' + (err && err.message ? err.message : err));
+    }
+  }
+
   // --- controls -------------------------------------------------------------
   function syncControls() {
     if (!el.seed) return;
@@ -426,6 +516,7 @@
     el.copy = document.getElementById('copy-link');
     el.animate = document.getElementById('animate-drawing');
     el.png = document.getElementById('export-png');
+    el.record = document.getElementById('record-canvas');
     el.mode = document.getElementById('mode');
     el.count = document.getElementById('count');
     el.countWrap = document.getElementById('count-wrap');
@@ -438,6 +529,9 @@
     el.densityOut = document.getElementById('density-out');
     el.opaqueWalls = document.getElementById('opaque-walls');
     el.status = document.getElementById('status');
+    el.recordingDialog = document.getElementById('recording-dialog');
+    el.saveRecording = document.getElementById('save-recording');
+    el.deleteRecording = document.getElementById('delete-recording');
 
     el.random.addEventListener('click', function () { regenerate(); });
     el.apply.addEventListener('click', applySeedInput);
@@ -448,6 +542,13 @@
     el.copy.addEventListener('click', doCopy);
     el.animate.addEventListener('click', animateDrawing);
     el.png.addEventListener('click', doExport);
+    el.record.addEventListener('click', toggleRecording);
+    el.saveRecording.addEventListener('click', savePendingRecording);
+    el.deleteRecording.addEventListener('click', discardPendingRecording);
+    el.recordingDialog.addEventListener('cancel', function (event) {
+      event.preventDefault();
+      discardPendingRecording();
+    });
 
     el.mode.addEventListener('change', function () {
       state.mode = el.mode.value === 'plate' ? 'plate' : 'single';
@@ -509,7 +610,7 @@
         const raw = Math.max(0, Math.min(1, ((t == null ? Date.now() : t) - started) / duration));
         const smooth = raw * raw * (3 - 2 * raw);
         const progress = from + (opening ? 1 : -1) * smooth;
-        render({ immediate: true, focusIndex: focusIndex, focusProgress: progress });
+        render({ immediate: true, focusIndex: focusIndex, focusProgress: progress, focusBackground: !opening });
         if (raw < 1) focusRafId = requestAnimationFrame(step);
         else {
           focusRafId = 0;
