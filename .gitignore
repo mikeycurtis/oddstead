@@ -1,0 +1,34 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local development
+.env
+.env.*
+!.env.example
+
+# Logs and temporary output
+*.log
+coverage/
+dist/
+build/
+tmp/
+temp/
+
+# Generated media and browser artifacts
+*.mp4
+*.webm
+*.mov
+screenshots/
+
+# Node tooling, if used locally for experiments
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
