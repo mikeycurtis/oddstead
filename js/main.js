@@ -18,6 +18,9 @@
     pitch: 16,
     density: 1,
     monumentality: 1,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
     count: 24,
     opaqueWalls: false,
     focus: null
@@ -54,6 +57,9 @@
     state.pitch = clamp(isFinite(state.pitch) ? state.pitch : 16, 2, 38);
     state.density = clamp(isFinite(state.density) ? state.density : 1, 0.4, 1.6);
     state.monumentality = clamp(isFinite(state.monumentality) ? state.monumentality : 1, 0.7, 1.4);
+    state.zoom = clamp(isFinite(state.zoom) ? state.zoom : 1, 1, 5);
+    state.panX = clamp(isFinite(state.panX) ? state.panX : 0, -1.5, 1.5);
+    state.panY = clamp(isFinite(state.panY) ? state.panY : 0, -1.5, 1.5);
     state.count = AD.plate.counts.indexOf(+state.count) >= 0 ? +state.count : 24;
     state.opaqueWalls = state.opaqueWalls === true || state.opaqueWalls === 'true' || state.opaqueWalls === 1;
     state.focus = state.mode === 'plate' && state.focus !== null && state.focus !== '' && Number.isInteger(+state.focus) && +state.focus >= 0 && +state.focus < state.count ? +state.focus : null;
@@ -134,6 +140,13 @@
     return plan;
   }
 
+  function resetCityView() {
+    state.zoom = 1;
+    state.panX = 0;
+    state.panY = 0;
+    render({ immediate: true });
+  }
+
   function now() {
     return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   }
@@ -212,7 +225,7 @@
         status('');
       } else if (state.mode === 'city') {
         const cp = ensureCityPlan();
-        AD.city.render(ctx, cp, { w: cssW, h: cssH, yaw: state.yaw, pitch: state.pitch, density: state.density, monumentality: state.monumentality, lod: 0.72 });
+        AD.city.render(ctx, cp, { w: cssW, h: cssH, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, panX: state.panX, panY: state.panY, density: state.density, monumentality: state.monumentality, lod: 0.72 });
         endFrame(ctx, cssW, cssH, dpr);
         updateA11y();
         status('');
@@ -269,7 +282,7 @@
     if (state.mode === 'single') {
       inkSingle(c, lw, lh, ensurePlan(), { yaw: state.yaw, pitch: state.pitch, opaqueWalls: state.opaqueWalls });
     } else if (state.mode === 'city') {
-      AD.city.render(c, ensureCityPlan(), { w: lw, h: lh, yaw: state.yaw, pitch: state.pitch, density: state.density, monumentality: state.monumentality, lod: 0.86 });
+      AD.city.render(c, ensureCityPlan(), { w: lw, h: lh, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, panX: state.panX, panY: state.panY, density: state.density, monumentality: state.monumentality, lod: 0.86 });
     } else {
       AD.plate.create(c, {
         seed: state.seed, count: state.count, mood: state.mood,
@@ -539,6 +552,7 @@
     el.densityOut.textContent = Number(state.density).toFixed(1) + '×';
     el.monumentalityOut.textContent = Number(state.monumentality).toFixed(1) + '×';
     el.countWrap.hidden = state.mode === 'single';
+    el.cityViewWrap.hidden = state.mode !== 'city';
     el.countLabel.textContent = state.mode === 'city' ? 'City size' : 'Plate size';
     el.countWrap.setAttribute('aria-hidden', state.mode === 'single' ? 'true' : 'false');
   }
@@ -555,6 +569,8 @@
     el.mode = document.getElementById('mode');
     el.count = document.getElementById('count');
     el.countLabel = document.getElementById('count-label');
+    el.cityViewWrap = document.getElementById('city-view-wrap');
+    el.resetCityView = document.getElementById('reset-city-view');
     el.countWrap = document.getElementById('count-wrap');
     el.mood = document.getElementById('mood');
     el.yaw = document.getElementById('yaw');
@@ -583,6 +599,7 @@
     el.record.addEventListener('click', toggleRecording);
     el.saveRecording.addEventListener('click', savePendingRecording);
     el.deleteRecording.addEventListener('click', discardPendingRecording);
+    el.resetCityView.addEventListener('click', resetCityView);
     el.recordingDialog.addEventListener('cancel', function (event) {
       event.preventDefault();
       discardPendingRecording();
@@ -677,28 +694,61 @@
     }
 
     let drag = null;
+    const pointers = {};
+    let pinch = null;
     let suppressClick = false;
     canvas.addEventListener('pointerdown', function (e) {
       if (e.button != null && e.button !== 0) return;
-      drag = { id: e.pointerId, x: e.clientX, startX: e.clientX, startY: e.clientY, moved: false, yaw: state.yaw, pitch: state.pitch };
+      pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if (state.mode === 'city' && Object.keys(pointers).length === 2) {
+        const ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
+        pinch = { distance: Math.hypot(a.x - b.x, a.y - b.y), zoom: state.zoom };
+        drag = null;
+        suppressClick = true;
+        return;
+      }
+      drag = { id: e.pointerId, x: e.clientX, startX: e.clientX, startY: e.clientY, moved: false,
+        yaw: state.yaw, pitch: state.pitch, panX: state.panX, panY: state.panY, city: state.mode === 'city' };
       try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
       canvas.classList.add('is-dragging');
     });
     canvas.addEventListener('pointermove', function (e) {
+      if (!pointers[e.pointerId]) return;
+      pointers[e.pointerId].x = e.clientX;
+      pointers[e.pointerId].y = e.clientY;
+      if (pinch && state.mode === 'city') {
+        const ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
+        const distance = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+        state.zoom = clamp(pinch.zoom * distance / Math.max(1, pinch.distance), 1, 5);
+        render({ immediate: true });
+        return;
+      }
       if (!drag || e.pointerId !== drag.id) return;
       const dx = e.clientX - drag.startX;
       const dy = e.clientY - drag.startY;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.moved = true;
       if (!drag.moved) return;
-      state.yaw = wrapYaw(drag.yaw - dx * 0.55);
-      state.pitch = clamp(drag.pitch - dy * 0.24, 2, 38);
-      el.yaw.value = String(state.yaw);
-      el.pitch.value = String(state.pitch);
-      el.yawOut.textContent = Math.round(state.yaw) + '°';
-      el.pitchOut.textContent = Math.round(state.pitch) + '°';
+      if (drag.city) {
+        const box = canvas.getBoundingClientRect();
+        state.panX = clamp(drag.panX + dx / Math.max(1, box.width) * 2, -1.5, 1.5);
+        state.panY = clamp(drag.panY + dy / Math.max(1, box.height) * 2, -1.5, 1.5);
+      } else {
+        state.yaw = wrapYaw(drag.yaw - dx * 0.55);
+        state.pitch = clamp(drag.pitch - dy * 0.24, 2, 38);
+        el.yaw.value = String(state.yaw);
+        el.pitch.value = String(state.pitch);
+        el.yawOut.textContent = Math.round(state.yaw) + '°';
+        el.pitchOut.textContent = Math.round(state.pitch) + '°';
+      }
       render({ immediate: true });
     });
     function endDrag(e) {
+      if (e.pointerId != null) delete pointers[e.pointerId];
+      if (pinch) {
+        if (Object.keys(pointers).length < 2) pinch = null;
+        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+        return;
+      }
       if (!drag || (e.pointerId != null && e.pointerId !== drag.id)) return;
       suppressClick = drag.moved;
       try { canvas.releasePointerCapture(drag.id); } catch (_) {}
@@ -710,6 +760,25 @@
     canvas.addEventListener('click', function (e) {
       if (suppressClick) { suppressClick = false; e.preventDefault(); return; }
       handleCanvasClick(e);
+    });
+    canvas.addEventListener('wheel', function (e) {
+      if (state.mode !== 'city') return;
+      e.preventDefault();
+      const oldZoom = state.zoom;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      state.zoom = clamp(oldZoom * factor, 1, 5);
+      const box = canvas.getBoundingClientRect();
+      const px = (e.clientX - box.left) / Math.max(1, box.width) - 0.5;
+      const py = (e.clientY - box.top) / Math.max(1, box.height) - 0.5;
+      const ratio = 1 - oldZoom / state.zoom;
+      state.panX = clamp(state.panX + px * ratio * 2, -1.5, 1.5);
+      state.panY = clamp(state.panY + py * ratio * 2, -1.5, 1.5);
+      render({ immediate: true });
+    }, { passive: false });
+    canvas.addEventListener('dblclick', function (e) {
+      if (state.mode !== 'city') return;
+      e.preventDefault();
+      resetCityView();
     });
 
     document.addEventListener('keydown', function (e) {

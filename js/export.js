@@ -16,6 +16,9 @@
     pitch: 'number',
     density: 'number',
     monumentality: 'number',
+    zoom: 'number',
+    panX: 'number',
+    panY: 'number',
     count: 'number',
     opaqueWalls: 'boolean',
     focus: 'number'

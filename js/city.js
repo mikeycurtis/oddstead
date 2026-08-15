@@ -113,7 +113,9 @@
   function render(ctx, city, opts) {
     opts = opts || {};
     const w = opts.w, h = opts.h, lod = opts.lod == null ? 0.72 : opts.lod;
-    const cam = G.makeCam({ yaw: opts.yaw, pitch: opts.pitch, scale: Math.min(w / 218, h / 190), cx: w / 2, cy: h * 0.58 });
+    const zoom = clamp(opts.zoom == null ? 1 : opts.zoom, 1, 5);
+    const cam = G.makeCam({ yaw: opts.yaw, pitch: opts.pitch, scale: Math.min(w / 218, h / 190) * zoom,
+      cx: w / 2 + (opts.panX || 0) * w * 0.5, cy: h * 0.58 + (opts.panY || 0) * h * 0.5 });
     const R = { P: function (x, y, z) { return G.project({ x: x, y: y, z: z }, cam); }, cam: cam };
     const pens = S.makePens(AD.rng.makeRng(city.seed + ':city-pens'), ST.pens.dryNib);
     const land = [{ x: city.bounds.x0, z: city.bounds.z0 }, { x: city.bounds.x1, z: city.bounds.z0 }, { x: city.bounds.x1, z: city.bounds.z1 }, { x: city.bounds.x0, z: city.bounds.z1 }];
